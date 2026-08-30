@@ -1,0 +1,62 @@
+[
+ [
+  "SPY",
+  "SPDR S&P 500 ETF Trust",
+  "ETF",
+  "Large Blend"
+ ],
+ [
+  "QQQ",
+  "Invesco QQQ Trust",
+  "ETF",
+  "Large Growth"
+ ],
+ [
+  "VOO",
+  "Vanguard S&P 500 ETF",
+  "ETF",
+  "Large Blend"
+ ],
+ [
+  "VTI",
+  "Vanguard Total Stock Market ETF",
+  "ETF",
+  "Total Market"
+ ],
+ [
+  "IWM",
+  "iShares Russell 2000 ETF",
+  "ETF",
+  "Small Blend"
+ ],
+ [
+  "DIA",
+  "SPDR Dow Jones Industrial Average ETF",
+  "ETF",
+  "Large Value"
+ ],
+ [
+  "ARKK",
+  "ARK Innovation ETF",
+  "ETF",
+  "Thematic Growth"
+ ],
+ [
+  "GLD",
+  "SPDR Gold Shares",
+  "ETF",
+  "Commodities"
+ ],
+ [
+  "TLT",
+  "iShares 20+ Year Treasury Bond ETF",
+  "ETF",
+  "Long Government"
+ ],
+ [
+  "SCHD",
+  "Schwab U.S. Dividend Equity ETF",
+  "ETF",
+  "Large Value"
+ ]
+]

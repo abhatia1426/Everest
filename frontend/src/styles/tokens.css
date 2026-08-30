@@ -1,0 +1,345 @@
+/* ===========================================================================
+   Everest design tokens — v3
+   ---------------------------------------------------------------------------
+   v2 made glass and aurora the interface. That reads as "themed dark mode"
+   rather than an instrument: blur behind numbers costs legibility, 24px radii
+   on every card make a screen look like a template, and an animated mesh
+   behind live data is noise competing with signal.
+
+   v3 keeps Everest's identity but demotes the effects to where they earn their
+   place:
+
+     · GLASS is chrome-only — surfaces that content scrolls underneath (topbar,
+       command palette, modals, mobile nav). Cards are opaque and layered.
+     · AURORA is a brand moment — landing hero and auth, via `.ambient`. It is
+       no longer painted behind the product surface.
+     · RADII tighten to a Linear/Ramp slab (14 / 10 / 8), so nesting reads.
+     · The ACCENT RAMP is reserved for interactive and AI states, not
+       decoration. Data colour comes from the up/down and chart scales.
+
+   Anything reading a token from JS goes through hooks/useThemeTokens.js.
+   =========================================================================== */
+
+[data-theme='dark'] {
+  /*
+   * Drives native control chrome — date pickers, select dropdowns, scrollbars.
+   * Set here rather than per-input: a hardcoded `[color-scheme:dark]` on the
+   * option expiry field rendered a dark picker on a white form in light mode.
+   */
+  color-scheme: dark;
+
+  /* Base + surfaces --------------------------------------------------------*/
+  --bg-base: #08090f;
+  /* Channel form of --bg-base, for translucent glass surfaces that need to
+     sit at an arbitrary alpha over the scene. Kept adjacent to the hex so the
+     two cannot drift apart. */
+  --bg-base-rgb: 8 9 15;
+  --bg-surface: #0c0e16;
+  --bg-card: #11131d;
+  --bg-card-hover: #161926;
+
+  /*
+   * Four opaque elevation tiers. Opaque (not alpha) is the change that makes
+   * dense data legible: an alpha card stacked on an alpha card compounds into
+   * mud, and text contrast stops being predictable.
+   *
+   * e0 recedes below the page (wells, track backgrounds)
+   * e1 is a quiet inset region inside a card
+   * e2 is the default reading plane — a card
+   * e3 floats above everything (popovers, dropdowns)
+   */
+  --e0-bg: #0a0b12;
+  --e0-border: rgba(255, 255, 255, 0.04);
+  --e1-bg: #0f111a;
+  --e1-border: rgba(255, 255, 255, 0.06);
+  --e2-bg: #12141f;
+  --e2-border: rgba(255, 255, 255, 0.08);
+  --e3-bg: #171a27;
+  --e3-border: rgba(255, 255, 255, 0.11);
+
+  /* Shadows are tight and low-spread: depth by layering, not by glow. */
+  --shadow-e1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-e2: 0 1px 3px rgba(0, 0, 0, 0.5), 0 8px 20px -12px rgba(0, 0, 0, 0.7);
+  --shadow-e3: 0 8px 24px -8px rgba(0, 0, 0, 0.7), 0 24px 56px -24px rgba(0, 0, 0, 0.9);
+
+  --border: rgba(255, 255, 255, 0.07);
+  --border-strong: rgba(255, 255, 255, 0.13);
+
+  /* Glass — chrome only. */
+  --glass-bg: rgba(12, 14, 22, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.09);
+  --glass-blur: blur(20px) saturate(160%);
+  --chrome-bg: rgba(12, 14, 22, 0.72);
+
+  /* Accent ramp ------------------------------------------------------------*/
+  --accent-blue: #5b8cff;
+  --accent-violet: #9d7bff;
+  --accent-green: #1fcf8b;
+  --accent-red: #ff5470;
+  --accent-amber: #ffb443;
+
+  --text-primary: #eef0f7;
+  --text-secondary: #9096ad;
+  --text-tertiary: #656b84;
+
+  --accent-blue-rgb: 91 140 255;
+  --accent-violet-rgb: 157 123 255;
+  --accent-green-rgb: 31 207 139;
+  --accent-red-rgb: 255 84 112;
+  --accent-amber-rgb: 255 180 67;
+  --text-primary-rgb: 238 240 247;
+  --text-secondary-rgb: 144 150 173;
+  --bg-base-rgb: 8 9 15;
+  --bg-surface-rgb: 12 14 22;
+  --bg-card-rgb: 17 19 29;
+  --bg-card-hover-rgb: 22 25 38;
+
+  --tint: 255 255 255;
+  --shadow-card: var(--shadow-e2);
+
+  /* Chart scale — categorical, for allocation and comparison series. Tuned to
+     stay distinguishable against a near-black plot area. */
+  --chart-1: #5b8cff;
+  --chart-2: #1fcf8b;
+  --chart-3: #a78bfa;
+  --chart-4: #ffb443;
+  --chart-5: #ff5470;
+  --chart-6: #38bdf8;
+  --chart-7: #f472b6;
+  --chart-8: #a3e635;
+  --grid-line: rgba(255, 255, 255, 0.055);
+
+  /* Ambient — used ONLY by `.ambient` (landing hero, auth). */
+  --aurora-1: rgba(91, 140, 255, 0.22);
+  --aurora-2: rgba(157, 123, 255, 0.18);
+  --aurora-3: rgba(31, 207, 139, 0.09);
+  --grain-opacity: 0.025;
+
+  /* ======================================================= ATMOSPHERE (dark)
+   * HIGH-ALTITUDE NIGHT. Not "the light theme inverted" — a different hour on
+   * the same mountain. The sky is a deep navy column that gets colder toward
+   * the zenith and carries a faint horizon illumination near the base, the way
+   * real air does when there is snow below it throwing moonlight back up.
+   *
+   * The whole Everest illustration is painted from these variables, so a theme
+   * switch re-skins the mountain with no React re-render — the attribute flips
+   * on <html> and every facet follows.
+   */
+  --sky-zenith: #04060e;
+  --sky-high: #070b18;
+  --sky-mid: #0b1223;
+  --sky-low: #101a31;
+  --sky-horizon: #182742;
+
+  /* The light on the summit. Dark mode is lit by a low moon behind the ridge,
+     which is why the glow sits BEHIND the peak rather than washing the face. */
+  --sky-glow: rgba(126, 166, 236, 0.20);
+  --sky-glow-core: rgba(178, 206, 248, 0.34);
+  --star-opacity: 0.5;
+
+  /*
+   * TERRAIN RAMP — ten steps, deepest shadow to brightest snow.
+   *
+   * Facets index into this ramp rather than carrying their own colours, which
+   * is what keeps a 200-polygon mountain coherent: there are ten values in the
+   * painting, not two hundred. tr0-tr4 are rock, tr5-tr6 are the transition
+   * (wind-scoured rock and old snow), tr7-tr9 are snow.
+   */
+  --tr0: #05080f;
+  --tr1: #090e1b;
+  --tr2: #0e1527;
+  --tr3: #141d34;
+  --tr4: #1c2745;
+  --tr5: #253358;
+  --tr6: #33446d;
+  --tr7: #4d5f88;
+  --tr8: #8496bb;
+  --tr9: #d8e2f4;
+
+  /* Haze — the colour distance is painted IN. Matches --sky-low so receding
+     layers dissolve into the air rather than into a grey. */
+  --haze: 16 26 49;
+  --cloud: 214 226 245;
+  --cloud-opacity: 0.30;
+  --spindrift: 226 236 250;
+}
+
+[data-theme='light'] {
+  color-scheme: light;
+
+  --bg-base: #f6f7fb;
+  --bg-base-rgb: 246 247 251;
+  --bg-surface: #ffffff;
+  --bg-card: #ffffff;
+  --bg-card-hover: #fafbff;
+
+  --e0-bg: #f1f3f8;
+  --e0-border: rgba(16, 22, 52, 0.05);
+  --e1-bg: #f8f9fc;
+  --e1-border: rgba(16, 22, 52, 0.07);
+  --e2-bg: #ffffff;
+  --e2-border: rgba(16, 22, 52, 0.09);
+  --e3-bg: #ffffff;
+  --e3-border: rgba(16, 22, 52, 0.11);
+
+  --shadow-e1: 0 1px 2px rgba(16, 22, 52, 0.04);
+  --shadow-e2: 0 1px 2px rgba(16, 22, 52, 0.06), 0 6px 16px -10px rgba(16, 22, 52, 0.16);
+  --shadow-e3: 0 8px 24px -8px rgba(16, 22, 52, 0.14), 0 24px 56px -28px rgba(16, 22, 52, 0.26);
+
+  --border: rgba(16, 22, 52, 0.09);
+  --border-strong: rgba(16, 22, 52, 0.16);
+
+  --glass-bg: rgba(255, 255, 255, 0.78);
+  --glass-border: rgba(16, 22, 52, 0.09);
+  --glass-blur: blur(20px) saturate(170%);
+  --chrome-bg: rgba(255, 255, 255, 0.78);
+
+  --accent-blue: #3d6ff5;
+  --accent-violet: #7c53f0;
+  --accent-green: #06996a;
+  --accent-red: #d92c4c;
+  --accent-amber: #a86a00;
+
+  --text-primary: #0b0e1a;
+  --text-secondary: #575e7a;
+  --text-tertiary: #838aa3;
+
+  --accent-blue-rgb: 61 111 245;
+  --accent-violet-rgb: 124 83 240;
+  --accent-green-rgb: 6 153 106;
+  --accent-red-rgb: 217 44 76;
+  --accent-amber-rgb: 168 106 0;
+  --text-primary-rgb: 11 14 26;
+  --text-secondary-rgb: 87 94 122;
+  --bg-base-rgb: 246 247 251;
+  --bg-surface-rgb: 255 255 255;
+  --bg-card-rgb: 255 255 255;
+  --bg-card-hover-rgb: 250 251 255;
+
+  --tint: 16 22 52;
+  --shadow-card: var(--shadow-e2);
+
+  --chart-1: #3d6ff5;
+  --chart-2: #06996a;
+  --chart-3: #7c53f0;
+  --chart-4: #b7791f;
+  --chart-5: #d92c4c;
+  --chart-6: #0284c7;
+  --chart-7: #db2777;
+  --chart-8: #4d7c0f;
+  --grid-line: rgba(16, 22, 52, 0.07);
+
+  --aurora-1: rgba(61, 111, 245, 0.16);
+  --aurora-2: rgba(124, 83, 240, 0.13);
+  --aurora-3: rgba(6, 153, 106, 0.07);
+  --grain-opacity: 0.016;
+
+  /* ====================================================== ATMOSPHERE (light)
+   * ALPINE DAYLIGHT. Thin cold air at altitude: the zenith is a saturated blue
+   * because there is less atmosphere above you to scatter it, and it washes to
+   * near-white at the horizon where you are looking through the most air.
+   * That vertical gradient is the single thing that makes a light-mode mountain
+   * read as HIGH rather than as a grey shape on a white page.
+   */
+  --sky-zenith: #93b7de;
+  --sky-high: #b0cbe9;
+  --sky-mid: #cbdef1;
+  --sky-low: #e3eef8;
+  --sky-horizon: #f4f9fd;
+
+  --sky-glow: rgba(255, 247, 227, 0.55);
+  --sky-glow-core: rgba(255, 252, 242, 0.85);
+  --star-opacity: 0;
+
+  /*
+   * The same ten-step contract, re-pitched for daylight.
+   *
+   * NOT the dark ramp inverted. Sunlit snow is genuinely near-white and sunlit
+   * rock is genuinely dark, so light mode runs at HIGHER contrast than dark —
+   * the opposite of the usual assumption. A light-mode mountain painted in soft
+   * mid-greys looks like fog, not like a clear morning.
+   */
+  --tr0: #39445c;
+  --tr1: #47536e;
+  --tr2: #56637f;
+  --tr3: #667491;
+  --tr4: #7987a3;
+  --tr5: #8e9cb7;
+  --tr6: #a6b4cb;
+  --tr7: #c6d3e4;
+  --tr8: #e6eef7;
+  --tr9: #ffffff;
+
+  --haze: 227 238 248;
+  --cloud: 255 255 255;
+  --cloud-opacity: 0.72;
+  --spindrift: 255 255 255;
+}
+
+/* Shared scales ------------------------------------------------------------*/
+:root {
+  /* Tightened: cards read as instrument panels, not template tiles. */
+  --radius-card: 14px;
+  --radius-panel: 10px;
+  --radius-control: 8px;
+
+  /*
+   * Type scale. The dashboard's whole hierarchy rests on the gap between
+   * `--text-hero` (the portfolio value, the single anchor on the page) and
+   * everything else, so the steps below it are deliberately close together —
+   * five competing sizes is what made v2 read flat.
+   */
+  --text-hero: clamp(2.75rem, 4.6vw, 3.75rem);
+  --text-display: clamp(2.25rem, 4vw, 3rem);
+  --text-page-title: clamp(1.375rem, 2.2vw, 1.75rem);
+  --text-section: 0.9375rem;
+  --text-body: 0.875rem;
+
+  /*
+   * LANDING-ONLY editorial scale.
+   *
+   * The product is deliberately dense — this is the one surface where type is
+   * allowed to be dramatic. `--display-hero` is roughly 3x the largest figure
+   * anywhere in /app, which is what makes the first viewport read as a
+   * statement rather than a page heading. Kept separate from the product scale
+   * so it cannot leak into the application.
+   */
+  /*
+   * FOUR SIZES, NOT SEVEN.
+   *
+   * The failure mode on a cinematic page is that every section shouts: a hero
+   * at 7rem followed by six section headings at 4.5rem flattens into one loud
+   * texture, and nothing reads as the summit. So the display size is used
+   * ONCE (the hero) and once again at the close; every section in between sets
+   * at `--e-title`, which is deliberately little more than half of it.
+   *
+   * Hierarchy on this page is carried by SPACE and POSITION more than by size.
+   */
+  /*
+   * Sized so the longest hero line ("Know your position.") sets on ONE line
+   * inside its column. At 7.4vw it broke to two, turning a two-line headline
+   * into four and pushing the supporting copy off the composition — the
+   * headline is a shape, and a shape that reflows is not art-directed.
+   */
+  --e-display: clamp(2.5rem, 5.2vw, 5.25rem);
+  --e-title: clamp(1.875rem, 3.9vw, 3.25rem);
+  --e-subtitle: clamp(1.25rem, 2vw, 1.75rem);
+  --e-lead: clamp(1rem, 1.1vw, 1.1875rem);
+  --e-label: 0.6875rem;
+
+  /* Reading measures. Display type wants a SHORT measure so the line breaks
+     land where they were composed; body copy wants a normal one. */
+  --e-measure-display: 15ch;
+  --e-measure: 44ch;
+
+  /* Retained: `.t-hero-display` / `.t-section-display` still resolve these. */
+  --display-hero: var(--e-display);
+  --display-section: var(--e-title);
+  --display-eyebrow: var(--e-label);
+  --landing-measure: var(--e-measure);
+
+  /* An 8pt rhythm. Denser than v2: this is an investing tool, not a brochure. */
+  --space-page: clamp(14px, 1.8vw, 24px);
+  --space-stack: 16px;
+  --grid-gap: 16px;
+}

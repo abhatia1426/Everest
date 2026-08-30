@@ -1,0 +1,601 @@
+@import './styles/tokens.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  * {
+    border-color: var(--border);
+  }
+
+  body {
+    @apply bg-base font-sans text-text-primary antialiased;
+    margin: 0;
+    overflow-x: hidden;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'ss01';
+    letter-spacing: -0.011em;
+    transition:
+      background-color 0.35s ease,
+      color 0.35s ease;
+  }
+
+  /*
+   * Grain only. The aurora mesh that used to live here moved to `.ambient`
+   * (see below) — an animated gradient behind live financial data is signal
+   * competing with noise, and it dulled every number on the page. Grain stays
+   * because it does real work: it stops large flat surfaces from banding.
+   */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    opacity: var(--grain-opacity);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent-blue);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  ::selection {
+    background: rgb(var(--accent-blue-rgb) / 0.28);
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgb(var(--tint) / 0.12);
+    border-radius: 99px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--tint) / 0.22);
+    background-clip: content-box;
+  }
+}
+
+@layer components {
+  /* ============================================================ ambient */
+  /*
+   * The aurora, scoped. Applied by the landing hero and the auth pages, where
+   * an atmospheric brand moment is the point. Never behind the product.
+   */
+  .ambient {
+    position: relative;
+    isolation: isolate;
+  }
+
+  .ambient::before {
+    content: '';
+    position: absolute;
+    inset: -25%;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(40% 36% at 16% 6%, var(--aurora-1), transparent 68%),
+      radial-gradient(36% 40% at 86% 20%, var(--aurora-2), transparent 66%),
+      radial-gradient(44% 38% at 60% 94%, var(--aurora-3), transparent 70%);
+    filter: blur(30px);
+    animation: aurora-drift 38s ease-in-out infinite alternate;
+  }
+
+  /* ========================================================== elevation */
+  /*
+   * Opaque tiers. Alpha-on-alpha was what made v2 muddy — two stacked
+   * translucent surfaces compound unpredictably and text contrast stops being
+   * something you can reason about. These composite to a known colour.
+   */
+  .surface-0 {
+    background: var(--e0-bg);
+    border: 1px solid var(--e0-border);
+    border-radius: var(--radius-panel);
+  }
+
+  .surface-1 {
+    background: var(--e1-bg);
+    border: 1px solid var(--e1-border);
+    border-radius: var(--radius-panel);
+  }
+
+  .card {
+    position: relative;
+    border-radius: var(--radius-card);
+    background: var(--e2-bg);
+    border: 1px solid var(--e2-border);
+    box-shadow: var(--shadow-e2);
+    transition:
+      border-color 0.2s ease,
+      box-shadow 0.2s ease,
+      background-color 0.2s ease;
+  }
+
+  .card-raised {
+    background: var(--e3-bg);
+    border-color: var(--e3-border);
+    box-shadow: var(--shadow-e3);
+  }
+
+  /*
+   * Chrome. The ONLY place blur survives — bars and overlays that page content
+   * scrolls beneath, where the blur communicates depth instead of decorating.
+   */
+  .glass-chrome {
+    background: var(--chrome-bg);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border-color: var(--glass-border);
+  }
+
+  .card-interactive {
+    @apply card cursor-pointer;
+  }
+
+  .card-interactive:hover {
+    border-color: var(--border-strong);
+    background: var(--bg-card-hover);
+  }
+
+  /* A quiet inset well: chart backgrounds, code, metric tracks. */
+  .well {
+    background: var(--e0-bg);
+    border: 1px solid var(--e0-border);
+    border-radius: var(--radius-panel);
+  }
+
+  /* ========================================================= typography */
+  .t-hero {
+    font-size: var(--text-hero);
+    font-weight: 700;
+    letter-spacing: -0.04em;
+    line-height: 1;
+    @apply text-text-primary;
+  }
+
+  .t-display {
+    font-size: var(--text-display);
+    font-weight: 700;
+    letter-spacing: -0.035em;
+    line-height: 1.02;
+    @apply text-text-primary;
+  }
+
+  .t-page-title {
+    font-size: var(--text-page-title);
+    font-weight: 640;
+    letter-spacing: -0.028em;
+    line-height: 1.15;
+    @apply text-text-primary;
+  }
+
+  .t-section {
+    font-size: var(--text-section);
+    font-weight: 600;
+    letter-spacing: -0.016em;
+    @apply text-text-primary;
+  }
+
+  /*
+   * The workhorse label. Tighter tracking and smaller than v2's — at 0.13em it
+   * read as a design flourish; at 0.08em it reads as a field label, which is
+   * what a dense financial surface needs.
+   */
+  .t-eyebrow {
+    font-size: 10px;
+    font-weight: 650;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+  }
+
+  .t-body {
+    font-size: var(--text-body);
+    line-height: 1.6;
+    @apply text-text-secondary;
+  }
+
+  /*
+   * Numerics. `tabular-nums` is non-negotiable on a financial surface: without
+   * it, a polling value visibly reflows its own column every 30 seconds.
+   */
+  .num {
+    @apply font-mono tabular-nums;
+    letter-spacing: -0.02em;
+    font-feature-settings: 'zero';
+  }
+
+  /*
+   * The hero figure is SANS, not mono — the one deliberate exception to the
+   * numeric rule. JetBrains Mono at 60px reads as a terminal readout; Inter
+   * with tabular figures reads as a headline number, which is what Stripe,
+   * Ramp and Wealthfront all do with their primary balance. `tnum` keeps the
+   * digit widths locked so a polling value still cannot jitter.
+   */
+  .num-hero {
+    @apply tabular-nums;
+    font-family: theme('fontFamily.sans');
+    font-weight: 700;
+    letter-spacing: -0.045em;
+    font-feature-settings: 'tnum', 'ss01';
+  }
+
+  /* =========================================================== landing */
+  /*
+   * THE EDITORIAL SCALE.
+   *
+   * Optical tightening scales with size — at 7rem the tracking that makes 16px
+   * legible reads as gaps between letters, so display type runs at -0.045em
+   * and body copy at nearly zero. Weight moves the opposite way: the display
+   * sizes sit at 620-660 rather than 700, because a very large face at full
+   * bold reads as a poster, and this is meant to read as an instrument.
+   */
+  .e-display {
+    font-size: var(--e-display);
+    font-weight: 640;
+    line-height: 0.88;
+    letter-spacing: -0.046em;
+    /* Long words must be able to break rather than push the page wide. The
+       reveal mask grows with wrapped content, so a two-line reveal still works. */
+    overflow-wrap: break-word;
+    @apply text-text-primary;
+  }
+
+  .e-title {
+    font-size: var(--e-title);
+    font-weight: 630;
+    line-height: 0.98;
+    letter-spacing: -0.036em;
+    overflow-wrap: break-word;
+    @apply text-text-primary;
+  }
+
+  .e-subtitle {
+    font-size: var(--e-subtitle);
+    font-weight: 600;
+    line-height: 1.16;
+    letter-spacing: -0.026em;
+    @apply text-text-primary;
+  }
+
+  .e-lead {
+    font-size: var(--e-lead);
+    line-height: 1.6;
+    letter-spacing: -0.008em;
+    @apply text-text-secondary;
+  }
+
+  /*
+   * The small uppercase technical label. Borrowed from survey drawings and
+   * instrument panels, not from marketing eyebrows — it carries a datum (an
+   * altitude, a stage index), which is why it is set in tabular figures.
+   */
+  .e-label {
+    font-size: var(--e-label);
+    font-weight: 640;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-tertiary);
+  }
+
+  /* Legacy aliases — auth pages and older surfaces still reference these. */
+  .t-hero-display {
+    @apply e-display;
+  }
+
+  .t-section-display {
+    @apply e-title;
+  }
+
+  /* Section index ("01", "02") — an editorial device that gives the page a
+     spine and tells the reader where they are without a progress bar. */
+  .t-index {
+    font-size: var(--display-eyebrow);
+    font-weight: 650;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-tertiary);
+  }
+
+  /*
+   * Masked line reveal. The line sits inside an overflow-hidden block and
+   * translates up from below, so it appears to rise out of the page rather
+   * than fade in on top of it — the difference between "animated" and
+   * "art-directed".
+   */
+  .line-mask {
+    display: block;
+    overflow: hidden;
+    /*
+     * Display type runs at line-height 0.88, which is SHORTER than the glyphs
+     * themselves — so an unpadded clip box crops ascenders and descenders. The
+     * padding creates room; the matching negative margin removes the visual
+     * gap it would otherwise add between lines.
+     */
+    padding: 0.1em 0 0.14em;
+    margin: -0.1em 0 -0.14em;
+  }
+
+  /* ===================================================== landing chrome */
+  /*
+   * LIQUID GLASS.
+   *
+   * The landing page has no header. Its controls are small floating objects
+   * that live INSIDE the scene, so the material has to behave like something
+   * physically in front of the sky: it refracts what is behind it (blur +
+   * saturate), it catches light on its top edge (the inset highlight), and it
+   * casts a little shadow. Those three together are what read as glass; a flat
+   * translucent fill reads as a scrim.
+   *
+   * `saturate()` matters more than the blur. Backdrop blur alone greys out the
+   * colour behind it and the pill goes muddy over a blue sky — pushing
+   * saturation back up is what keeps the atmosphere visible THROUGH the glass,
+   * which was the whole requirement.
+   *
+   * Built on `--tint`, so it inverts correctly: a white-tinted glass over the
+   * night sky, an ink-tinted glass over daylight snow.
+   */
+  .glass-pill {
+    position: relative;
+    border-radius: 999px;
+    background: rgb(var(--tint) / 0.07);
+    backdrop-filter: blur(18px) saturate(180%);
+    -webkit-backdrop-filter: blur(18px) saturate(180%);
+    border: 1px solid rgb(var(--tint) / 0.12);
+    box-shadow:
+      inset 0 1px 0 rgb(var(--tint) / 0.16),
+      0 8px 28px -12px rgb(0 0 0 / 0.4);
+    transition:
+      background-color 0.3s ease,
+      border-color 0.3s ease,
+      transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /*
+   * Light mode needs the opposite move. Ink tint at 7% over bright snow is
+   * invisible, so the glass switches to a WHITE body with an ink border — the
+   * same object, lit from the front instead of from behind.
+   */
+  [data-theme='light'] .glass-pill {
+    background: rgb(255 255 255 / 0.62);
+    border-color: rgb(var(--tint) / 0.1);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.9),
+      0 8px 28px -14px rgb(16 22 52 / 0.28);
+  }
+
+  .glass-pill:hover {
+    background: rgb(var(--tint) / 0.12);
+    border-color: rgb(var(--tint) / 0.2);
+  }
+
+  [data-theme='light'] .glass-pill:hover {
+    background: rgb(255 255 255 / 0.82);
+    border-color: rgb(var(--tint) / 0.16);
+  }
+
+  /*
+   * The one solid object on the page.
+   *
+   * Foreground-on-background rather than accent blue: against a blue-hour sky
+   * an accent-blue button disappears into the atmosphere, where maximum
+   * contrast reads instantly in both themes and keeps the accent reserved for
+   * live data. It is the only element permitted to be fully opaque in the hero.
+   */
+  .pill-solid {
+    @apply inline-flex select-none items-center gap-2 text-[14px] font-semibold;
+    border-radius: 999px;
+    padding: 0.8rem 1.35rem;
+    background: var(--text-primary);
+    color: var(--bg-base);
+    box-shadow: 0 10px 34px -12px rgb(0 0 0 / 0.5);
+    transition:
+      transform 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+      box-shadow 0.35s ease,
+      opacity 0.2s ease;
+  }
+
+  .pill-solid:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 16px 42px -14px rgb(0 0 0 / 0.55);
+  }
+
+  /* ============================================================ accents */
+  .text-gradient {
+    background: linear-gradient(120deg, var(--accent-blue), var(--accent-violet));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .accent-bar {
+    background: linear-gradient(180deg, var(--accent-blue), var(--accent-violet));
+  }
+
+  /* Hairline rule used to divide metric groups and section headers. */
+  .hairline {
+    background: var(--border);
+  }
+
+  /* =========================================================== controls */
+  .btn {
+    @apply inline-flex select-none items-center justify-center gap-2 text-sm font-semibold;
+    border-radius: var(--radius-control);
+    padding: 0.5rem 0.85rem;
+    transition:
+      background-color 0.15s ease,
+      border-color 0.15s ease,
+      box-shadow 0.15s ease,
+      opacity 0.15s ease;
+  }
+  .btn:active {
+    transform: scale(0.99);
+  }
+  .btn:disabled {
+    @apply cursor-not-allowed opacity-45;
+  }
+
+  /*
+   * Solid, not gradient. A gradient primary button next to gradient text next
+   * to a gradient card border is three competing emphases; the accent means
+   * more when only one thing uses it.
+   */
+  .btn-primary {
+    @apply btn text-white;
+    background: var(--accent-blue);
+    box-shadow: 0 1px 0 0 rgb(255 255 255 / 0.14) inset;
+  }
+  .btn-primary:hover {
+    background: color-mix(in srgb, var(--accent-blue) 88%, white);
+  }
+
+  .btn-ghost {
+    @apply btn text-text-primary;
+    background: var(--e1-bg);
+    border: 1px solid var(--e1-border);
+  }
+  .btn-ghost:hover {
+    background: var(--e2-bg);
+    border-color: var(--border-strong);
+  }
+
+  .btn-danger {
+    @apply btn;
+    color: var(--text-tertiary);
+    background: transparent;
+  }
+  .btn-danger:hover {
+    background: rgb(var(--accent-red-rgb) / 0.12);
+    @apply text-down;
+  }
+
+  .input {
+    @apply w-full text-sm text-text-primary transition-all duration-200;
+    border-radius: var(--radius-control);
+    background: var(--e1-bg);
+    border: 1px solid var(--e1-border);
+    padding: 0.55rem 0.75rem;
+  }
+  .input::placeholder {
+    color: var(--text-tertiary);
+  }
+  .input:focus {
+    outline: none;
+    background: var(--e2-bg);
+    border-color: rgb(var(--accent-blue-rgb) / 0.55);
+    box-shadow: 0 0 0 3px rgb(var(--accent-blue-rgb) / 0.14);
+  }
+
+  .label {
+    @apply t-eyebrow mb-2 block;
+  }
+
+  /*
+   * Retained for legacy call sites on surfaces not yet redesigned. New work
+   * uses `ui/Segmented` — a segmented control reads as one control with a
+   * selected state, where a row of pills reads as N separate buttons.
+   */
+  .pill {
+    @apply cursor-pointer select-none px-2.5 py-1 text-xs font-semibold
+      transition-colors duration-150;
+    border-radius: var(--radius-control);
+  }
+
+  /* =============================================================== misc */
+  .divider {
+    height: 1px;
+    background: var(--border);
+  }
+
+  .skeleton {
+    border-radius: var(--radius-control);
+    background-color: rgb(var(--tint) / 0.045);
+    background-image: linear-gradient(
+      90deg,
+      rgb(var(--tint) / 0.045) 0%,
+      rgb(var(--tint) / 0.085) 50%,
+      rgb(var(--tint) / 0.045) 100%
+    );
+    background-size: 600px 100%;
+    @apply animate-shimmer;
+  }
+
+  .gradient-border {
+    position: relative;
+    isolation: isolate;
+  }
+  .gradient-border::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(
+      120deg,
+      rgb(var(--accent-blue-rgb) / 0.7),
+      rgb(var(--accent-violet-rgb) / 0.2),
+      rgb(var(--accent-blue-rgb) / 0.7)
+    );
+    background-size: 300% 300%;
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    z-index: -1;
+    @apply animate-gradient-pan;
+  }
+
+  .lift-hover {
+    @apply transition-all duration-200;
+  }
+  .lift-hover:hover {
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes aurora-drift {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  100% {
+    transform: translate3d(2%, -3%, 0) scale(1.08);
+  }
+}
+
+@keyframes gradient-pan {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
