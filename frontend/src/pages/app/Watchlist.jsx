@@ -1,37 +1,34 @@
 import { useDeferredValue, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Eye, Plus, Search, Sparkles } from 'lucide-react'
+import { Eye, Plus, Sparkles } from 'lucide-react'
 
-import { PageHeader } from '../../components/AppLayout'
 import { Modal } from '../../components/Modal'
 import { StaggerGroup, StaggerItem } from '../../components/Motion'
+import { AddPositionModal } from '../../components/portfolio/AddPositionModal'
 import { AssetSelector, useAssetQuote } from '../../components/ui/form/AssetSelector'
 import { FormActions } from '../../components/ui/form/FormShell'
-import { EmptyState, ErrorState, InlineLoader, Skeleton } from '../../components/States'
-import { MonitorTile } from '../../components/watchlist/MonitorTile'
-import { MarketStatus } from '../../components/ui/MarketStatus'
+import { EmptyState, ErrorState, InlineLoader } from '../../components/States'
+import { MonitorBoard } from '../../components/watchlist/MonitorBoard'
+import { SelectedSecurity } from '../../components/watchlist/SelectedSecurity'
+import { TodaysMoves } from '../../components/watchlist/TodaysMoves'
 import { Segmented } from '../../components/ui/Segmented'
 import { Surface } from '../../components/ui/Surface'
-import { Toolbar } from '../../components/ui/Toolbar'
 import { useToast } from '../../components/ui/Toast'
 import { useFavorites } from '../../hooks/useFavorites'
+import { useSessionHistory } from '../../hooks/useSessionHistory'
 import { useWatchlist } from '../../hooks/useWatchlist'
 import { invalidate } from '../../lib/cache'
 import { api } from '../../lib/api'
-import { equityOrFallback } from '../../lib/equitySource'
-import { fmtPercent, fmtRelative, pnlColor } from '../../lib/format'
+import { displayName, equityOrFallback } from '../../lib/equitySource'
+import { fmtRelative } from '../../lib/format'
+import { buildMonitorRow, withAttention } from '../../lib/monitor'
+import { normalizeQuote } from '../../lib/quotes'
 
 const STYLES = [
   { value: 'growth', label: 'Growth' },
   { value: 'value', label: 'Value' },
   { value: 'momentum', label: 'Momentum' },
   { value: 'dividend', label: 'Dividend' },
-]
-
-const SORTS = [
-  { value: 'change', label: 'Move' },
-  { value: 'ticker', label: 'A-Z' },
-  { value: 'price', label: 'Price' },
 ]
 
 const VERDICT_TONE = {
@@ -44,12 +41,8 @@ const VERDICT_TONE = {
 /* ------------------------------------------------------------------ modals */
 
 /**
- * Add a company to the watchlist.
- *
- * Same language as Add Position and Add Contract: search, then a confirmed
- * asset card showing what you picked and what it currently trades at. The old
- * version was a bare autocomplete over a submit button, so you could not tell
- * whether you had selected the right company until it appeared in the list.
+ * Add a company to the watchlist. Unchanged from the previous page — search,
+ * then a confirmed asset card showing what you picked and what it trades at.
  */
 function AddTickerModal({ open, onClose, onAdded }) {
   const toast = useToast()
@@ -61,8 +54,6 @@ function AddTickerModal({ open, onClose, onAdded }) {
     symbol || null,
   )
 
-  // Reset on open — see AddPositionModal for why this is a render-time
-  // adjustment rather than an effect.
   const [wasOpen, setWasOpen] = useState(open)
   if (wasOpen !== open) {
     setWasOpen(open)
@@ -90,7 +81,7 @@ function AddTickerModal({ open, onClose, onAdded }) {
       invalidate('watchlist')
       setSymbol('')
       toast.success(`${upper} added to watchlist`)
-      onAdded?.()
+      onAdded?.(upper)
       onClose()
     } catch (err) {
       setError(err)
@@ -131,6 +122,13 @@ function AddTickerModal({ open, onClose, onAdded }) {
   )
 }
 
+/**
+ * The AI screener — the real `/ai/screener` capability, kept subordinate.
+ *
+ * It ranks the symbols already on the watchlist against a named investing
+ * style, and it lives behind a quiet ghost button rather than on the page. It
+ * is not a recommendation engine and nothing on the board is scored by it.
+ */
 function ScreenerModal({ open, onClose, tickers }) {
   const [style, setStyle] = useState('growth')
   const [result, setResult] = useState(null)
@@ -185,9 +183,6 @@ function ScreenerModal({ open, onClose, tickers }) {
             {(result.ranked || []).map((row, index) => (
               <article
                 key={row.ticker}
-                // An accent edge conveys rank order without giving every row
-                // its own bordered box — twelve boxes inside one modal is what
-                // made the v2 result read as a wall.
                 style={{
                   animationDelay: `${index * 50}ms`,
                   borderColor: index === 0 ? 'var(--accent-blue)' : 'var(--border)',
@@ -232,59 +227,44 @@ function ScreenerModal({ open, onClose, tickers }) {
   )
 }
 
-/* ----------------------------------------------------------------- movers */
-
-/**
- * The scan strip: biggest absolute moves across the whole list, stated once
- * above the board. On a monitoring surface this is the answer to the question
- * the user actually arrived with — it saves reading twelve tiles to find the
- * two that moved.
- */
-function ScanStrip({ items }) {
-  const movers = useMemo(
-    () =>
-      items
-        .filter((item) => typeof item.change_percent === 'number')
-        .sort((a, b) => Math.abs(b.change_percent) - Math.abs(a.change_percent))
-        .slice(0, 5),
-    [items],
-  )
-
-  if (movers.length < 2) return null
-
-  return (
-    <div
-      className="mb-4 flex flex-wrap items-center gap-x-5 gap-y-2 border-b pb-3"
-      style={{ borderColor: 'var(--border)' }}
-    >
-      <span className="t-eyebrow">Biggest moves</span>
-      {movers.map((item) => (
-        <Link
-          key={item.id}
-          to={`/app/ticker/${item.ticker}`}
-          className="flex items-baseline gap-1.5 text-[11px] transition-opacity duration-150
-            hover:opacity-80"
-        >
-          <span className="num font-semibold text-text-primary">{item.ticker}</span>
-          <span className={`num font-bold ${pnlColor(item.change_percent)}`}>
-            {fmtPercent(item.change_percent)}
-          </span>
-        </Link>
-      ))}
-    </div>
-  )
-}
-
 /* -------------------------------------------------------------------- page */
 
 /**
- * Watchlist — the monitoring workspace.
+ * Watchlist, composed to the approved `Everest Watchlist.dc.html`.
  *
- * Primary task: sweep many symbols for movement. Everything follows from that.
- * Tiles are compact so four fit across and a twelve-symbol list is one screen;
- * the default sort is by move rather than alphabetical, because "what changed"
- * outranks "what starts with A"; and pinned symbols float to the top so the
- * handful you actually care about never scroll away.
+ * THE PAGE IS A MARKET MONITOR WITH A SELECTED-SECURITY STAGE. Not a
+ * portfolio, not a ledger, not a grid of cards, and not a small Ticker Detail.
+ * Three bands say so:
+ *
+ *   1. Today's Moves — one diverging percentage axis carrying every watched
+ *      symbol at its real day move. The page's signature object.
+ *   2. The monitor board — dense, column-aligned rows built for sweeping.
+ *   3. The stage — the selected symbol, answered in enough depth to decide
+ *      whether to open it properly.
+ *
+ * Bands 2 and 3 sit side by side at 1.55fr / 1fr and stack at 1220px, which is
+ * the approved geometry.
+ *
+ * WHY SELECTION AND NOT NAVIGATION. Comparing two symbols on a monitor is the
+ * core act, and it has to cost a click rather than a page load. Rows therefore
+ * drive the stage; "Open detail" is the explicit route to
+ * `/app/ticker/:symbol`.
+ *
+ * THE 30 SESSIONS BEHIND EVERYTHING. The sparkline, the range rail, momentum,
+ * the "normal day" baseline and two of the four attention conditions are all
+ * statements about daily sessions. They come from one batched, cached request
+ * for the whole board (`useSessionHistory`) — never one request per symbol,
+ * which would exhaust the provider's per-minute budget on first paint. Where a
+ * symbol's history could not be loaded, its row keeps its geometry and every
+ * dependent cell renders an em dash. Nothing is interpolated.
+ *
+ * WHAT THE DESIGN DRAWS THAT THIS DOES NOT:
+ *
+ * · The mockup's fourth period stop is 5Y. Everest's history endpoint has no
+ *   five-year window; ALL is the honest nearest and is what the control says.
+ * · The mockup's account chip, nav and theme toggle belong to the app shell,
+ *   which already draws them. They are not redrawn here.
+ * · There are no alerts. Everest has no alert system, so the page offers none.
  */
 export default function Watchlist() {
   const { items, loading, error, refetch, remove, pending } = useWatchlist()
@@ -293,102 +273,123 @@ export default function Watchlist() {
 
   const [addOpen, setAddOpen] = useState(false)
   const [screenerOpen, setScreenerOpen] = useState(false)
+  const [positionFor, setPositionFor] = useState(null)
   const [query, setQuery] = useState('')
-  const [sector, setSector] = useState('')
-  const [sort, setSort] = useState('change')
+  const [scope, setScope] = useState('All')
+  const [sort, setSort] = useState('move')
+  const [period, setPeriod] = useState('1M')
+  const [chosen, setChosen] = useState(null)
 
   const deferredQuery = useDeferredValue(query)
 
-  const sectors = useMemo(() => {
-    const found = new Set()
-    for (const item of items) {
-      const reference = equityOrFallback(item.ticker)
-      const name = item.sector && item.sector !== 'Unknown' ? item.sector : reference.sector
-      if (name) found.add(name)
-    }
-    return [...found].sort()
-  }, [items])
+  const tickers = useMemo(() => items.map((item) => item.ticker), [items])
+  const { candlesFor, loading: historyLoading } = useSessionHistory(tickers)
+
+  /**
+   * Every symbol, with its measurements. Built once and shared by the
+   * spectrum, the board and the stage so the three cannot disagree about
+   * whether a symbol is near its high.
+   */
+  const rows = useMemo(
+    () =>
+      items.map((item) => {
+        const reference = equityOrFallback(item.ticker)
+        const enriched = {
+          ...item,
+          // The API echoes the bare ticker back as `company` when no quote
+          // arrived; the local reference name must outrank that placeholder.
+          company: displayName(item.ticker, item.company),
+          sector:
+            item.sector && item.sector !== 'Unknown' ? item.sector : reference.sector || null,
+        }
+        // No cost basis: a watched symbol need not be owned, so there is no
+        // cost to fall back to and `unavailable` is the correct floor.
+        const quote = normalizeQuote(item)
+        return withAttention(buildMonitorRow(enriched, candlesFor(item.ticker), quote))
+      }),
+    [items, candlesFor],
+  )
+
+  const byTicker = useMemo(() => new Map(rows.map((row) => [row.ticker, row])), [rows])
+
+  const counts = useMemo(
+    () => ({
+      All: rows.length,
+      Pinned: rows.filter((row) => isPinned(row.ticker)).length,
+      Attention: rows.filter((row) => row.attention).length,
+      Gainers: rows.filter((row) => row.hasQuote && row.changePercent > 0).length,
+      Losers: rows.filter((row) => row.hasQuote && row.changePercent < 0).length,
+    }),
+    [rows, isPinned],
+  )
 
   const visible = useMemo(() => {
     const needle = deferredQuery.trim().toLowerCase()
 
-    const filtered = items.filter((item) => {
-      const reference = equityOrFallback(item.ticker)
-      const itemSector =
-        item.sector && item.sector !== 'Unknown' ? item.sector : reference.sector
-
-      if (sector && itemSector !== sector) return false
+    const filtered = rows.filter((row) => {
+      if (scope === 'Pinned' && !isPinned(row.ticker)) return false
+      if (scope === 'Attention' && !row.attention) return false
+      if (scope === 'Gainers' && !(row.hasQuote && row.changePercent > 0)) return false
+      if (scope === 'Losers' && !(row.hasQuote && row.changePercent < 0)) return false
       if (!needle) return true
-
       return (
-        item.ticker.toLowerCase().includes(needle) ||
-        (item.company || '').toLowerCase().includes(needle) ||
-        reference.name.toLowerCase().includes(needle) ||
-        String(itemSector || '').toLowerCase().includes(needle)
+        row.ticker.toLowerCase().includes(needle) ||
+        row.name.toLowerCase().includes(needle) ||
+        String(row.sector || '').toLowerCase().includes(needle)
       )
     })
 
-    // Copy before sorting — never mutate the hook's array.
     const sorted = [...filtered].sort((a, b) => {
-      if (sort === 'change') {
-        // By absolute move: a 4% fall is as newsworthy as a 4% rise.
-        return Math.abs(b.change_percent ?? 0) - Math.abs(a.change_percent ?? 0)
+      if (sort === 'move') {
+        // Absolute: a 4% fall is as newsworthy as a 4% rise.
+        return Math.abs(b.changePercent ?? 0) - Math.abs(a.changePercent ?? 0)
       }
+      if (sort === 'return30') return (b.return30 ?? -Infinity) - (a.return30 ?? -Infinity)
       if (sort === 'price') return (b.price ?? -Infinity) - (a.price ?? -Infinity)
       return a.ticker.localeCompare(b.ticker)
     })
 
     // Pins win over the chosen sort, always.
     return sorted.sort((a, b) => Number(isPinned(b.ticker)) - Number(isPinned(a.ticker)))
-  }, [items, deferredQuery, sector, sort, isPinned])
+  }, [rows, deferredQuery, scope, sort, isPinned])
 
-  const tickers = useMemo(() => items.map((i) => i.ticker), [items])
+  /**
+   * The selected symbol. `chosen` is only a preference — if it leaves the
+   * watchlist or drops out of the current filter the stage falls back to the
+   * first visible row rather than emptying, so the stage is never blank while
+   * the board has content.
+   */
+  const selected = useMemo(() => {
+    if (chosen && byTicker.has(chosen) && visible.some((row) => row.ticker === chosen)) {
+      return byTicker.get(chosen)
+    }
+    if (chosen && byTicker.has(chosen) && visible.length === 0) return byTicker.get(chosen)
+    return visible[0] || rows[0] || null
+  }, [chosen, byTicker, visible, rows])
+
   const initialLoad = loading && items.length === 0
 
-  return (
-    <div className="mx-auto max-w-[1440px]">
-      <PageHeader
-        subtitle="Live prices refresh every 30 seconds."
-        actions={
-          <>
-            {/* Stated once for the whole board, not repeated in every tile. */}
-            <MarketStatus />
-            <button
-              type="button"
-              onClick={() => setScreenerOpen(true)}
-              disabled={items.length === 0}
-              className="btn-ghost cursor-pointer"
-            >
-              <Sparkles size={15} />
-              <span className="hidden sm:inline">Screen with AI</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setAddOpen(true)}
-              className="btn-primary cursor-pointer"
-            >
-              <Plus size={15} />
-              <span className="hidden sm:inline">Add ticker</span>
-            </button>
-          </>
-        }
-      />
+  const clearFilters = () => {
+    setQuery('')
+    setScope('All')
+  }
 
-      {initialLoad ? (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {Array.from({ length: 8 }).map((_, i) => (
-            // Matches the tile's real height so the board does not reflow.
-            <Skeleton key={i} className="h-[186px] w-full rounded-card" />
-          ))}
-        </div>
-      ) : error && items.length === 0 ? (
-        <ErrorState error={error} onRetry={refetch} />
-      ) : items.length === 0 ? (
+  const removeFromWatchlist = async (row) => {
+    await remove(row.id)
+    if (chosen === row.ticker) setChosen(null)
+    toast.success(`${row.ticker} removed from watchlist`)
+  }
+
+  if (error && items.length === 0) return <ErrorState error={error} onRetry={refetch} />
+
+  if (!initialLoad && items.length === 0) {
+    return (
+      <>
         <Surface>
           <EmptyState
             icon={Eye}
             title="Nothing on your watchlist yet"
-            description="Track the companies you are researching — prices, daily moves and 7-day trends in one view."
+            description="Track the companies you are researching — prices, daily moves, 30-session trends and where each one sits in its own monthly range."
             action={
               <button
                 type="button"
@@ -401,77 +402,101 @@ export default function Watchlist() {
             }
           />
         </Surface>
-      ) : (
-        <>
-          <ScanStrip items={items} />
+        <AddTickerModal
+          open={addOpen}
+          onClose={() => setAddOpen(false)}
+          onAdded={(symbol) => {
+            setChosen(symbol)
+            refetch({ silent: true, force: true })
+          }}
+        />
+      </>
+    )
+  }
 
-          {items.length > 4 ? (
-            <Toolbar
-              query={query}
-              onQueryChange={setQuery}
-              placeholder="Search watchlist"
-              sorts={SORTS}
-              sort={sort}
-              onSortChange={setSort}
-              filters={sectors}
-              filter={sector}
-              onFilterChange={setSector}
-              filterLabel="All sectors"
-              count={visible.length}
-              total={items.length}
-            />
-          ) : null}
+  return (
+    <StaggerGroup className="flex flex-col gap-3">
+      <StaggerItem>
+        <TodaysMoves
+          rows={rows}
+          selected={selected?.ticker}
+          onSelect={setChosen}
+          onAddTicker={() => setAddOpen(true)}
+          onScreen={() => setScreenerOpen(true)}
+          screenDisabled={items.length === 0}
+        />
+      </StaggerItem>
 
-          {visible.length === 0 ? (
-            <Surface>
-              <EmptyState
-                icon={Search}
-                title="No matches"
-                description="Try a different company name, ticker or sector."
-                action={
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setQuery('')
-                      setSector('')
-                    }}
-                    className="btn-ghost cursor-pointer"
-                  >
-                    Clear filters
-                  </button>
-                }
-              />
-            </Surface>
-          ) : (
-            <StaggerGroup
-              className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
-              stagger={0.03}
-            >
-              {visible.map((item) => (
-                <StaggerItem key={item.id}>
-                  <MonitorTile
-                    item={item}
-                    pinned={isPinned(item.ticker)}
-                    onTogglePin={() => toggle(item.ticker)}
-                    removing={pending === item.id}
-                    onRemove={async () => {
-                      await remove(item.id)
-                      toast.success(`${item.ticker} removed from watchlist`)
-                    }}
-                  />
-                </StaggerItem>
-              ))}
-            </StaggerGroup>
-          )}
-        </>
-      )}
+      {/*
+        1.55fr / 1fr, single column at 1220px — the approved main grid. The
+        board keeps `min-w-0` so its own horizontal scroll never widens the
+        page; nothing here may overflow the viewport.
+      */}
+      {/*
+        A DEFINITE height at desktop, not a minimum. The design's main band is
+        660px and the board scrolls inside it; with `min-height` the board would
+        instead grow to its row count and drag the stage's chart — a grid
+        sibling — to the same height. Below 1220px the columns stack and each
+        takes its natural height, which is what the approved file does too.
+      */}
+      <StaggerItem
+        className="grid gap-3 min-[1221px]:h-[660px]
+          [grid-template-columns:minmax(0,1.55fr)_minmax(340px,1fr)]
+          max-[1220px]:[grid-template-columns:minmax(0,1fr)]"
+      >
+        <MonitorBoard
+          rows={visible}
+          selected={selected?.ticker}
+          onSelect={setChosen}
+          isPinned={isPinned}
+          scope={scope}
+          onScope={setScope}
+          counts={counts}
+          query={query}
+          onQuery={setQuery}
+          sort={sort}
+          onSort={setSort}
+          loading={initialLoad || (historyLoading && rows.length === 0)}
+          onClearFilters={clearFilters}
+        />
+
+        {selected ? (
+          <SelectedSecurity
+            row={selected}
+            pinned={isPinned(selected.ticker)}
+            onTogglePin={() => toggle(selected.ticker)}
+            onAddPosition={setPositionFor}
+            onRemove={removeFromWatchlist}
+            removing={pending === selected.id}
+            period={period}
+            onPeriod={setPeriod}
+          />
+        ) : null}
+      </StaggerItem>
 
       <AddTickerModal
         open={addOpen}
         onClose={() => setAddOpen(false)}
-        onAdded={() => refetch({ silent: true })}
+        onAdded={(symbol) => {
+          setChosen(symbol)
+          refetch({ silent: true, force: true })
+        }}
       />
       <ScreenerModal open={screenerOpen} onClose={() => setScreenerOpen(false)} tickers={tickers} />
-    </div>
+      <AddPositionModal
+        key={positionFor || 'blank'}
+        open={Boolean(positionFor)}
+        defaultTicker={positionFor || ''}
+        onClose={() => setPositionFor(null)}
+        onAdded={(saved) => {
+          invalidate('portfolio')
+          invalidate('pnl')
+          invalidate('pfhist')
+          invalidate('activity')
+          toast.success(`${saved?.ticker} added`, 'Your position is now being tracked.')
+          setPositionFor(null)
+        }}
+      />
+    </StaggerGroup>
   )
 }

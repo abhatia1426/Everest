@@ -114,10 +114,19 @@ export function ThesisResult({ result }) {
   )
 }
 
-const SEVERITY_TONE = {
-  high: 'bg-down/12 text-down',
-  medium: 'bg-warn/12 text-warn',
-  low: 'bg-accent/12 text-accent',
+/**
+ * The model's emphasis, used as SORT ORDER only — never rendered as a grade.
+ * An unrecognised or absent severity sorts last rather than being coerced into
+ * a bucket it was never assigned.
+ */
+const SEVERITY_RANK = { high: 0, medium: 1, moderate: 1, low: 2 }
+
+function orderBySeverity(flags) {
+  return [...flags].sort(
+    (a, b) =>
+      (SEVERITY_RANK[String(a.severity).toLowerCase()] ?? 3) -
+      (SEVERITY_RANK[String(b.severity).toLowerCase()] ?? 3),
+  )
 }
 
 export function AnalystResult({ result }) {
@@ -173,25 +182,44 @@ export function AnalystResult({ result }) {
         </section>
       ) : null}
 
+      {/*
+        FLAGGED OBSERVATIONS, NOT GRADED RISK.
+
+        The backend schema still returns a `severity` of low/medium/high and
+        that field is left alone — it is genuine model output and re-shaping
+        the payload would be a schema change for a presentation problem.
+
+        What is dropped is the GRADE. Rendering "HIGH" as a red badge made a
+        written observation look like an Everest risk rating computed by a
+        model this product does not have. Everest measures concentration and
+        variability; it does not score risk, and the interface must not imply
+        a scale it cannot defend.
+
+        The severity is not discarded — it ORDERS the list, so the model's own
+        emphasis still reaches the reader as sequence rather than as a grade.
+      */}
       {result.risk_flags?.length ? (
         <section>
-          <h4 className="mb-2.5 text-xs font-bold uppercase tracking-wider text-text-secondary">
-            Risk flags
+          <h4 className="mb-1 text-xs font-bold uppercase tracking-wider text-text-secondary">
+            Flagged observations
           </h4>
+          <p className="mb-2.5 text-[11px] leading-relaxed text-text-tertiary">
+            Written notes from the analysis, most-emphasised first. These are observations, not an
+            Everest risk score.
+          </p>
           <ul className="space-y-2">
-            {result.risk_flags.map((flag, index) => (
+            {orderBySeverity(result.risk_flags).map((flag, index) => (
               <li key={index} className="animate-fade-up rounded-lg border border-subtle bg-tint/[0.02] p-3">
-                <div className="flex items-center gap-2">
+                <div className="flex items-start gap-2">
                   <span
-                    className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase ${
-                      SEVERITY_TONE[String(flag.severity).toLowerCase()] || SEVERITY_TONE.low
-                    }`}
-                  >
-                    {flag.severity}
-                  </span>
+                    aria-hidden="true"
+                    className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-text-tertiary"
+                  />
                   <span className="text-sm font-semibold">{flag.title}</span>
                 </div>
-                <p className="mt-1.5 text-xs leading-relaxed text-text-secondary">{flag.detail}</p>
+                <p className="mt-1.5 pl-3 text-xs leading-relaxed text-text-secondary">
+                  {flag.detail}
+                </p>
               </li>
             ))}
           </ul>

@@ -8,8 +8,19 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!--
+      Two font systems load globally; only ONE is bound globally.
+
+      Inter / JetBrains Mono remain the document default and are what the
+      frozen landing page renders in — `body { @apply font-sans }` still
+      resolves to Inter.
+
+      Archivo / Instrument Sans are the approved authenticated-app faces. They
+      are loaded here (a <link> cannot be scoped) but bound exclusively inside
+      `.app-theme` in index.css, so nothing outside /app changes typeface.
+    -->
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Archivo:wght@400;500;600;700;800&family=Instrument+Sans:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
     <script>

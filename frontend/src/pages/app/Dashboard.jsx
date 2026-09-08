@@ -1,53 +1,88 @@
-import { useCallback, useMemo } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 
 import { StaggerGroup, StaggerItem } from '../../components/Motion'
 import { ErrorState } from '../../components/States'
-import { ActivityFeed } from '../../components/dashboard/ActivityFeed'
+import { ActivityPanel } from '../../components/dashboard/ActivityPanel'
 import { AllocationPanel } from '../../components/dashboard/AllocationPanel'
-import { CommandBar } from '../../components/dashboard/CommandBar'
+import { DailyNetPanel } from '../../components/dashboard/DailyNetPanel'
 import { HoldingsPanel } from '../../components/dashboard/HoldingsPanel'
 import { InsightRail } from '../../components/dashboard/InsightRail'
-import { MarketStrip } from '../../components/dashboard/MarketStrip'
 import { MoversPanel } from '../../components/dashboard/MoversPanel'
-import { PerformancePanel } from '../../components/dashboard/PerformancePanel'
-import { WatchlistPanel } from '../../components/dashboard/WatchlistPanel'
+import { NewsroomPanel } from '../../components/dashboard/NewsroomPanel'
+import { PortfolioInstrument } from '../../components/dashboard/PortfolioInstrument'
+import { TickerStrip } from '../../components/dashboard/TickerStrip'
 import { useApi } from '../../hooks/useApi'
 import { TTL } from '../../lib/cache'
+import { useBookStatePublisher } from '../../hooks/useBookState'
 import { useMode } from '../../hooks/useMode'
 import { useWatchlist } from '../../hooks/useWatchlist'
 import { api } from '../../lib/api'
-import { deriveInsights, splitMovers } from '../../lib/insights'
+import { deriveInsights } from '../../lib/insights'
 import { QUOTE_STATE, aggregateQuoteState, normalizeQuote } from '../../lib/quotes'
 
 /**
- * The command center.
+ * The Dashboard, composed to the approved `Everest Dashboard v2` design.
  *
- * COMPOSITION, not decoration. v2 stacked seven full-width bands in identical
- * card chrome, so nothing was subordinate to anything and the page read as a
- * scroll. Here a twelve-column bento gives every row an unequal split —
- * 12 / 8+4 / 7+5 / 5+4+3 — and hierarchy comes from *span*, which survives a
- * theme change in a way that borders and shadows do not.
+ * FOUR BANDS, asymmetric, full-bleed:
  *
- * The reading order is a deliberate argument:
- *   1. market context   — what is the world doing (strip, not a card)
- *   2. portfolio value  — what am I worth (the single hero-size element)
- *   3. performance      — how did I get here
- *   4. holdings/movers  — what do I own, what moved
- *   5. insights/watch   — what deserves attention next
+ *   1. the value panel + the blue performance field   (0.86fr / 1.9fr)
+ *   2. the watchlist tape                             (full width)
+ *   3. holdings / allocation / [movers + needs a look] (1.62 / 0.82 / 0.72)
+ *   4. activity / daily net / newsroom                 (1 / 1.05 / 0.9)
  *
- * Data fetching is unchanged from v2: same endpoints, same 30s poll, same
- * paper/real mode, same stale-price fallback.
+ * The lopsided ratios are the point. Three equal columns is the generic SaaS
+ * grid this redesign exists to leave behind; unequal ones say which object is
+ * the subject of each band before a single label is read.
+ *
+ * ROW 4 IS PRESENT, AND THAT IS A CORRECTION.
+ *
+ * An earlier pass deleted all three of its modules because the mockup's
+ * contents were unsupported — a BUY/SELL/DIV/DEP ledger with amounts, a cash
+ * weight, and invented headlines. Deleting the modules was the wrong remedy
+ * for the right observation. Unsupported CONTENT is a reason for an honest
+ * unavailable state; it is not a reason to change the page's silhouette. Each
+ * module now keeps its approved geometry and carries only what Everest can
+ * actually measure:
+ *
+ *   · Activity   — the three creation events /activity genuinely emits, dated
+ *                  rather than priced. No trades, dividends or transfers.
+ *   · Daily net  — real session-over-session differences of the same
+ *                  reconstructed history the performance field plots, sharing
+ *                  its cache entry so it costs no extra request.
+ *   · Newsroom   — real provider headlines for the largest holding, not the
+ *                  mockup's placeholder bars.
+ *
+ * CASH IS GONE FROM THIS PAGE ENTIRELY — metric tile, ledger row, treemap tile
+ * and cash-weight observation.
+ *
+ * Everest models no cash balance anywhere: not on the user, not in /portfolio,
+ * not in /pnl. An earlier pass kept the design's cash slots and filled them
+ * with em dashes, which was the wrong read of "preserve the region": an empty
+ * placeholder still asserts that cash is a supported concept which merely
+ * failed to load. It is not unavailable, it does not exist, and the honest
+ * rendering of a concept the product does not have is its absence.
+ *
+ * Consequently the positions ARE the portfolio here, so allocation weights are
+ * portfolio weights with nothing silently excluded, and the 2x2 reads
+ * Cost basis / Holdings over Total return / Best today at the approved
+ * geometry. This is a DATA-REQUIRED deviation from Dashboard v2.
+ *
+ * Data fetching is unchanged: same endpoints, same 30s poll, same paper/real
+ * mode, same stale-price fallback, same all-or-nothing history contract.
  */
 export default function Dashboard() {
   const { mode } = useMode()
+  const { publish, clear } = useBookStatePublisher()
 
   // One shared watchlist for the whole shell — no second poll from here.
   const { items: watchlistItems, loading: watchlistLoading } = useWatchlist()
 
   const pnlFetcher = useCallback(() => api.pnl(mode), [mode])
-  const { data: pnl, loading, error, refetch } = useApi(pnlFetcher, [mode], { key: `pnl:${mode}`, ttl: TTL.QUOTE, pollMs: 30000 })
-
-  const { data: activityData, loading: activityLoading } = useApi(() => api.activity(8), [], { key: 'activity:8', ttl: TTL.ACTIVITY })
+  const { data: pnl, loading, error, refetch } = useApi(pnlFetcher, [mode], {
+    key: `pnl:${mode}`,
+    ttl: TTL.QUOTE,
+    pollMs: 30000,
+  })
 
   const positions = useMemo(() => pnl?.positions || [], [pnl])
 
@@ -59,31 +94,45 @@ export default function Dashboard() {
    * than the ledger rows it is the sum of.
    */
   const bookQuoteState = useMemo(
-    () =>
-      aggregateQuoteState(
-        positions.map((p) => normalizeQuote(p, { costBasis: p.avg_cost })),
-      ),
+    () => aggregateQuoteState(positions.map((p) => normalizeQuote(p, { costBasis: p.avg_cost }))),
     [positions],
   )
+  /*
+   * Two signals, one conclusion — and the second one is NOT a competing quote
+   * system.
+   *
+   * `aggregateQuoteState` remains the authority on quote confidence. But the
+   * backend's cost-basis fallback is invisible to it: `_enrich` substitutes
+   * `avg_cost` INTO `current_price` and raises `price_stale`, so
+   * `normalizeQuote` sees a present price plus a stale flag and correctly
+   * classifies it CACHED — never COST_BASIS, which only fires when no price
+   * arrives at all. The book therefore rendered under "Total portfolio" while
+   * every figure in it was actually cost basis.
+   *
+   * `price_stale` is the backend's own contract for "this row is valued at
+   * cost", so it is read here for exactly that, once, alongside the canonical
+   * state rather than instead of it.
+   */
+  const allAtCost = positions.length > 0 && positions.every((p) => p.price_stale)
   const pricesStale =
     positions.length > 0 &&
-    (bookQuoteState === QUOTE_STATE.COST_BASIS || bookQuoteState === QUOTE_STATE.UNAVAILABLE)
+    (bookQuoteState === QUOTE_STATE.COST_BASIS ||
+      bookQuoteState === QUOTE_STATE.UNAVAILABLE ||
+      allAtCost)
 
-  // Movers span holdings *and* watchlist — "what changed today" is not limited
-  // to what you own.
-  const movers = useMemo(() => {
-    const combined = [
-      ...positions.map((p) => ({ ...p, price: p.current_price })),
-      ...watchlistItems,
-    ]
-    const seen = new Set()
-    const unique = combined.filter((row) => {
-      if (seen.has(row.ticker)) return false
-      seen.add(row.ticker)
-      return true
-    })
-    return splitMovers(unique)
-  }, [positions, watchlistItems])
+  /*
+   * Publish the aggregate to the chrome, which renders it once for the whole
+   * page. Cleared on unmount so the indicator does not linger over a route
+   * that has no book.
+   */
+  useEffect(() => {
+    if (positions.length === 0) {
+      clear()
+      return undefined
+    }
+    publish({ state: bookQuoteState, positionCount: positions.length })
+    return () => clear()
+  }, [bookQuoteState, positions.length, publish, clear])
 
   const insights = useMemo(
     () => deriveInsights({ pnl, watchlist: watchlistItems }),
@@ -95,50 +144,68 @@ export default function Dashboard() {
   const initialLoad = loading && !pnl
 
   return (
-    <div className="mx-auto max-w-[1440px]">
-      <MarketStrip />
+    <StaggerGroup className="flex flex-col gap-3.5">
+      {/* --- 1. Value + performance field ----------------------------- */}
+      <StaggerItem>
+        <PortfolioInstrument
+          pnl={pnl}
+          positions={positions}
+          loading={initialLoad}
+          pricesStale={pricesStale}
+          mode={mode}
+        />
+      </StaggerItem>
 
-      <StaggerGroup className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-8 xl:grid-cols-12">
-        {/* --- 1. What am I worth -------------------------------------- */}
-        <StaggerItem className="md:col-span-8 xl:col-span-12">
-          <CommandBar pnl={pnl} loading={initialLoad} pricesStale={pricesStale} />
-        </StaggerItem>
+      {/* --- 2. The tape ---------------------------------------------- */}
+      <StaggerItem>
+        <TickerStrip items={watchlistItems} loading={watchlistLoading} />
+      </StaggerItem>
 
-        {/* --- 2. How did I get here ----------------------------------- */}
-        <StaggerItem className="md:col-span-8 xl:col-span-8">
-          <PerformancePanel mode={mode} />
-        </StaggerItem>
-
-        <StaggerItem className="md:col-span-8 xl:col-span-4">
-          <AllocationPanel allocation={pnl?.allocation} loading={initialLoad} />
-        </StaggerItem>
-
-        {/* --- 3. What do I own, and what moved ------------------------ */}
-        <StaggerItem className="md:col-span-8 xl:col-span-7">
+      {/* --- 3. The analysis ------------------------------------------ */}
+      {/* Design row 3: `minmax(0,1.62fr) minmax(280px,.82fr) minmax(260px,.72fr)`,
+          collapsing at the shell's own 1240px breakpoint rather than at `xl`. */}
+      <div className="grid grid-cols-1 gap-3.5 min-[1241px]:grid-cols-[minmax(0,1.62fr)_minmax(280px,0.82fr)_minmax(260px,0.72fr)] min-[1241px]:items-start">
+        <StaggerItem className="min-w-0">
+          {/* The watchlist is already loaded for the tape above; passing it
+              down lets the 30d column show a real series for any holding the
+              user also watches, at no additional request. */}
           <HoldingsPanel
             positions={positions}
             totalValue={pnl?.total_value || 0}
             loading={initialLoad}
+            watchlistItems={watchlistItems}
           />
         </StaggerItem>
 
-        <StaggerItem className="md:col-span-8 xl:col-span-5">
-          <MoversPanel {...movers} loading={initialLoad} />
+        <StaggerItem className="min-w-0">
+          <AllocationPanel positions={positions} loading={initialLoad} />
         </StaggerItem>
 
-        {/* --- 4. What deserves attention next ------------------------- */}
-        <StaggerItem className="md:col-span-5 xl:col-span-5">
+        {/* The narrow column carries two short modules rather than one tall
+            one — it is the only place in the composition where stacking
+            reads as intentional. */}
+        <StaggerItem className="flex min-w-0 flex-col gap-3.5">
+          <MoversPanel positions={positions} loading={initialLoad} />
           <InsightRail insights={insights} loading={initialLoad} />
         </StaggerItem>
+      </div>
 
-        <StaggerItem className="md:col-span-3 xl:col-span-4">
-          <WatchlistPanel items={watchlistItems} loading={watchlistLoading} />
+      {/* --- 4. The record ------------------------------------------- */}
+      {/* Design row 4: `minmax(0,1fr) minmax(0,1.05fr) minmax(0,.9fr)`, and
+          the same 1240px collapse to a single column as rows 1 and 3. */}
+      <div className="grid grid-cols-1 gap-3.5 min-[1241px]:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)_minmax(0,0.9fr)] min-[1241px]:items-start">
+        <StaggerItem className="min-w-0">
+          <ActivityPanel mode={mode} />
         </StaggerItem>
 
-        <StaggerItem className="md:col-span-8 xl:col-span-3">
-          <ActivityFeed events={activityData?.events || []} loading={activityLoading} />
+        <StaggerItem className="min-w-0">
+          <DailyNetPanel mode={mode} />
         </StaggerItem>
-      </StaggerGroup>
-    </div>
+
+        <StaggerItem className="min-w-0">
+          <NewsroomPanel positions={positions} loading={initialLoad} />
+        </StaggerItem>
+      </div>
+    </StaggerGroup>
   )
 }

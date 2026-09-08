@@ -71,6 +71,557 @@
 }
 
 @layer components {
+  /* =================================================== APP ATMOSPHERE ===
+   *
+   * NEUTRAL GRAPHITE, scoped to the authenticated product.
+   *
+   * The shared palette is pitched toward navy — `--bg-base: #08090f`, a
+   * secondary text of `#9096ad` — because it was built to sit under the
+   * landing page's blue-hour mountain, where a cold cast is the whole point.
+   * Carried into the product that same cast reads as generic dark-mode SaaS:
+   * every panel is faintly blue, every label faintly lilac, and the accent has
+   * nothing to be accent AGAINST.
+   *
+   * So the product re-declares the surface and text ramps on its own root as
+   * near-black neutrals. Scoping matters: the landing is frozen and still
+   * resolves the originals, so nothing outside `/app` moves by a pixel.
+   *
+   * Blue stays the interaction accent. Green and red stay strictly financial.
+   * Violet leaves the product entirely — it survives only in the landing.
+   */
+  .app-theme {
+    --bg-base: #09090a;
+    --bg-base-rgb: 9 9 10;
+    --bg-surface: #0e0e10;
+    --bg-surface-rgb: 14 14 16;
+    --bg-card: #161618;
+    --bg-card-rgb: 22 22 24;
+    --bg-card-hover: #1c1c1f;
+    --bg-card-hover-rgb: 28 28 31;
+
+    /*
+     * FOUR PLANES, not two.
+     *
+     * page → canvas → panel → nested. The reference's richness comes almost
+     * entirely from this stack being visible: a near-black page, a slightly
+     * lifted application canvas inside a rounded frame, panels lifted again on
+     * that canvas, and small nested cards inside the panels. Flattening it to
+     * "background + one card colour" is what made the previous pass read as a
+     * terminal rather than a product.
+     */
+    --frame-canvas: #0b0b0d;
+    --panel-bg: #151517;
+    --panel-border: rgba(255, 255, 255, 0.07);
+    --nested-bg: #1c1c1f;
+    --nested-border: rgba(255, 255, 255, 0.055);
+
+    --radius-frame: 30px;
+    --radius-module: 24px;
+    --radius-nested: 16px;
+
+    --e0-bg: #0c0c0e;
+    --e0-border: rgba(255, 255, 255, 0.035);
+    --e1-bg: #151517;
+    --e1-border: rgba(255, 255, 255, 0.06);
+    --e2-bg: #161618;
+    --e2-border: rgba(255, 255, 255, 0.07);
+    --e3-bg: #202023;
+    --e3-border: rgba(255, 255, 255, 0.1);
+
+    /* Borders recede hard. Hierarchy is carried by fill and space instead —
+       a screen of equally-bordered rectangles has no hierarchy at all. */
+    --border: rgba(255, 255, 255, 0.055);
+    --border-strong: rgba(255, 255, 255, 0.11);
+
+    --text-primary: #f4f4f5;
+    --text-secondary: #a0a0a7;
+    --text-tertiary: #6b6b73;
+    --text-primary-rgb: 244 244 245;
+    --text-secondary-rgb: 160 160 167;
+
+    /* Smoky charcoal, not blue-black. */
+    --chrome-bg: rgba(16, 16, 18, 0.72);
+    --glass-bg: rgba(16, 16, 18, 0.72);
+    --glass-border: rgba(255, 255, 255, 0.08);
+
+    --grid-line: rgba(255, 255, 255, 0.045);
+    /* chart-3 was violet; a teal keeps eight distinguishable series without
+       reintroducing the purple cast this palette exists to remove. */
+    --chart-3: #2dd4bf;
+
+    --shadow-e2: 0 1px 2px rgba(0, 0, 0, 0.55), 0 10px 26px -16px rgba(0, 0, 0, 0.8);
+    --shadow-e3: 0 10px 30px -10px rgba(0, 0, 0, 0.75), 0 28px 64px -28px rgba(0, 0, 0, 0.95);
+
+    background: var(--bg-base);
+    /*
+     * Re-assert `color` here, not just the variable.
+     *
+     * `body` sets `color: var(--text-primary)` and resolves it against the
+     * GLOBAL palette. Colour then inherits as a computed value, so every
+     * element that does not name a colour class kept the landing's slightly
+     * navy ink (#0b0e1a) even inside `.app-theme` — including the hero figure,
+     * the single most important text on the screen. Re-declaring it makes the
+     * neutral ramp actually inherit.
+     */
+    color: var(--text-primary);
+  }
+
+  /*
+   * Light mode is NOT the dark ramp inverted. It runs warmer and softer —
+   * depth from shadow rather than from borders, which is what keeps an
+   * analytical light UI from looking like a wireframe.
+   */
+  [data-theme='light'] .app-theme {
+    --frame-canvas: #f4f4f6;
+    --panel-bg: #ffffff;
+    --panel-border: rgba(9, 9, 11, 0.07);
+    --nested-bg: #ffffff;
+    --nested-border: rgba(9, 9, 11, 0.06);
+
+    --bg-base: #f6f6f7;
+    --bg-base-rgb: 246 246 247;
+    --bg-surface: #ffffff;
+    --bg-surface-rgb: 255 255 255;
+    --bg-card: #ffffff;
+    --bg-card-rgb: 255 255 255;
+    --bg-card-hover: #fbfbfc;
+    --bg-card-hover-rgb: 251 251 252;
+
+    --e0-bg: #f0f0f2;
+    --e0-border: rgba(9, 9, 11, 0.045);
+    --e1-bg: #f7f7f8;
+    --e1-border: rgba(9, 9, 11, 0.06);
+    --e2-bg: #ffffff;
+    --e2-border: rgba(9, 9, 11, 0.07);
+    --e3-bg: #ffffff;
+    --e3-border: rgba(9, 9, 11, 0.09);
+
+    --border: rgba(9, 9, 11, 0.07);
+    --border-strong: rgba(9, 9, 11, 0.13);
+
+    --text-primary: #0b0b0d;
+    --text-secondary: #5c5c64;
+    --text-tertiary: #8b8b93;
+    --text-primary-rgb: 11 11 13;
+    --text-secondary-rgb: 92 92 100;
+
+    /* Frosted white, not grey plastic. */
+    --chrome-bg: rgba(255, 255, 255, 0.72);
+    --glass-bg: rgba(255, 255, 255, 0.72);
+    --glass-border: rgba(9, 9, 11, 0.07);
+
+    --tint: 9 9 11;
+    --grid-line: rgba(9, 9, 11, 0.06);
+    --chart-3: #0d9488;
+
+    --shadow-e2: 0 1px 2px rgba(9, 9, 11, 0.05), 0 8px 24px -16px rgba(9, 9, 11, 0.18);
+    --shadow-e3: 0 10px 30px -12px rgba(9, 9, 11, 0.14), 0 28px 64px -32px rgba(9, 9, 11, 0.22);
+  }
+
+  /* ============================================ APP TYPE SCALE (product) */
+  /*
+   * Bigger, and fewer steps. The product was set almost entirely between 10px
+   * and 15px, which is why it read as technical rather than confident: at that
+   * range every element is the same visual weight and hierarchy has to be
+   * carried by borders, which is exactly the crutch this pass removes.
+   *
+   * The hero climbs to ~5rem so the portfolio figure is unambiguously the
+   * largest object on the screen, and a `--text-figure` step is introduced
+   * between it and body copy so secondary numbers (a sector total, a P/L) can
+   * be anchors in their own right instead of captions.
+   */
+  .app-theme {
+    --text-hero: clamp(3rem, 5.4vw, 4.75rem);
+    --text-figure: clamp(1.375rem, 1.9vw, 1.75rem);
+  }
+
+  /*
+   * The eyebrow, calmed. At 10px/0.08em in uppercase it was loud for what it
+   * is — a field label — and there were dozens of them. Slightly larger, much
+   * looser weight and tighter tracking makes it recede.
+   */
+  .app-theme .t-eyebrow {
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.055em;
+    color: var(--text-tertiary);
+  }
+
+  /*
+   * Module title. Normal case, ~19px, medium weight.
+   *
+   * The reference titles its panels the way a magazine titles a section —
+   * "Portfolio assets Performance", "Allocation Performance" — in plain
+   * sentence case at a readable size. Everest was labelling every module with
+   * a 10px uppercase eyebrow, which is instrument-panel styling applied to
+   * something that is actually a heading, and it is the single biggest reason
+   * the product read as a developer tool.
+   */
+  .t-module {
+    font-size: 19px;
+    font-weight: 600;
+    letter-spacing: -0.022em;
+    line-height: 1.2;
+    @apply text-text-primary;
+  }
+
+  /* Sentence-case supporting label — replaces most former eyebrows. */
+  .t-label {
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: -0.006em;
+    color: var(--text-secondary);
+  }
+
+  /* Secondary financial anchor: smaller than the hero, far larger than a row. */
+  .t-figure {
+    font-size: var(--text-figure);
+    font-weight: 660;
+    letter-spacing: -0.03em;
+    line-height: 1.05;
+    @apply tabular-nums text-text-primary;
+    font-feature-settings: 'tnum', 'ss01';
+  }
+
+  /* ========================================================= MODULES ====
+   *
+   * (The outer application frame was removed: the canvas is the page now, so
+   * there is no island to draw. Containment moved inward to these modules.)
+   *
+   * A content module on the canvas — the default container.
+   */
+  .module {
+    position: relative;
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: var(--radius-module);
+    /* A hairline of light along the top edge. It is the cheapest way to make a
+       flat panel read as a lit surface rather than a filled rectangle, and it
+       is most of the difference between "card" and "material". */
+    box-shadow: inset 0 1px 0 rgb(var(--tint) / 0.05);
+  }
+
+  /*
+   * The one differentiated supporting module.
+   *
+   * Three identically-styled panels in a row is the SaaS grid the whole
+   * redesign is avoiding, and the fix is not a fourth border treatment — it is
+   * letting ONE of them be the feature. Allocation gets a deeper, cooler
+   * ground so its colour columns sit on something rather than floating on the
+   * same fill as the tables beside it.
+   */
+  .allocation-module {
+    background:
+      radial-gradient(130% 95% at 50% 0%, rgb(var(--accent-blue-rgb) / 0.1) 0%, transparent 64%),
+      #08080a;
+    border-color: rgb(var(--tint) / 0.09);
+    /* Recessed rather than raised — the inner shadow reverses the module's
+       usual top highlight, so this one panel reads as a well the columns sit
+       inside instead of a card they sit on. */
+    box-shadow: inset 0 2px 10px rgb(0 0 0 / 0.5);
+  }
+
+  [data-theme='light'] .allocation-module {
+    background:
+      radial-gradient(130% 95% at 50% 0%, rgb(var(--accent-blue-rgb) / 0.05) 0%, transparent 64%),
+      #f7f7fa;
+    border-color: rgb(9 9 11 / 0.07);
+    /* Same recessed intent, at daylight strength — the dark inset would read
+       as a smudge on a white panel. */
+    box-shadow: inset 0 2px 8px rgb(9 9 11 / 0.045);
+  }
+
+  /* A card INSIDE a module — the metric tiles in the hero. */
+  .nested {
+    background: var(--nested-bg);
+    border: 1px solid var(--nested-border);
+    border-radius: var(--radius-nested);
+  }
+
+  [data-theme='light'] .module,
+  [data-theme='light'] .nested {
+    box-shadow: 0 1px 2px rgb(9 9 11 / 0.04), 0 8px 24px -18px rgb(9 9 11 / 0.16);
+  }
+
+  /* ================================================= LIQUID GLASS (app) ===
+   *
+   * Chrome material, layered ABOVE the financial content — never the content
+   * itself. Three things make it read as glass rather than as a scrim: it
+   * refracts (blur + saturate), it catches light on its top edge (the inset
+   * highlight), and it casts a soft shadow.
+   *
+   * `saturate` is doing more work than the blur. Blur alone desaturates what
+   * is behind it and the control goes muddy; pushing saturation back up keeps
+   * the surface underneath visible THROUGH the glass.
+   */
+  /*
+   * The material, dialled up so it is actually visible.
+   *
+   * At 5% tint over a near-black canvas the previous version was technically
+   * translucent and perceptually nothing. Real glass needs three things
+   * simultaneously: a body bright enough to separate from what is behind it
+   * (9%), a SPECULAR top edge that is brighter than the body (18%) so light
+   * appears to catch the bevel, and a dark bottom-inset so the lower lip reads
+   * as thickness. The gradient body is what sells the curvature.
+   */
+  .glass-control {
+    position: relative;
+    isolation: isolate;
+    background:
+      linear-gradient(
+        180deg,
+        rgb(var(--tint) / 0.15) 0%,
+        rgb(var(--tint) / 0.07) 44%,
+        rgb(var(--tint) / 0.045) 100%
+      );
+    backdrop-filter: blur(30px) saturate(200%);
+    -webkit-backdrop-filter: blur(30px) saturate(200%);
+    border: 1px solid rgb(var(--tint) / 0.14);
+    box-shadow:
+      inset 0 1px 0 rgb(var(--tint) / 0.24),
+      inset 0 -1px 0 rgb(0 0 0 / 0.4),
+      0 8px 24px -10px rgb(0 0 0 / 0.65);
+  }
+
+  /*
+   * The specular streak.
+   *
+   * A real bevel does not light evenly across its top edge — the highlight is
+   * brightest in the middle and fades at the corners where the surface turns
+   * away. Faking that with a horizontal gradient on a 1px inset line is the
+   * single detail that separates "translucent chip" from "glass", and it costs
+   * one pseudo-element.
+   */
+  .glass-control::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 45%;
+    border-radius: inherit;
+    pointer-events: none;
+    background: linear-gradient(
+      100deg,
+      transparent 0%,
+      rgb(var(--tint) / 0.09) 30%,
+      rgb(var(--tint) / 0.14) 50%,
+      rgb(var(--tint) / 0.06) 70%,
+      transparent 100%
+    );
+    mask-image: linear-gradient(180deg, #000 0%, transparent 100%);
+    -webkit-mask-image: linear-gradient(180deg, #000 0%, transparent 100%);
+  }
+
+  [data-theme='light'] .glass-control {
+    background: linear-gradient(
+      180deg,
+      rgb(255 255 255 / 0.9) 0%,
+      rgb(255 255 255 / 0.68) 100%
+    );
+    border-color: rgb(9 9 11 / 0.09);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 1),
+      inset 0 -1px 0 rgb(9 9 11 / 0.05),
+      0 6px 20px -10px rgb(9 9 11 / 0.22);
+  }
+
+  /*
+   * Controls layered on a saturated colour field.
+   *
+   * The hero chart block is dark in BOTH themes, so anything sitting on it has
+   * to key off white rather than the app's text ramp — otherwise light mode
+   * renders ink-coloured glass and near-black labels on a deep blue surface.
+   * Redefining the four variables locally is cheaper and less error-prone than
+   * maintaining a parallel set of "on colour" component classes.
+   */
+  .on-color {
+    --tint: 255 255 255;
+    --text-primary: #ffffff;
+    /* Kept high: this text sits on a bright saturated field, where the usual
+       secondary/tertiary steps drop below legible. */
+    --text-secondary: rgba(255, 255, 255, 0.92);
+    --text-tertiary: rgba(255, 255, 255, 0.75);
+  }
+
+  /* ============================================== iOS-style pill control */
+  /*
+   * Capsule geometry, tactile press. The track is a recessed well; the thumb
+   * is the only lit object in it. Inactive segments stay genuinely low
+   * contrast so the selected one does not have to shout to win.
+   */
+  .pill-track {
+    @apply inline-flex items-center;
+    border-radius: 999px;
+    padding: 4px;
+    gap: 2px;
+    background: rgb(var(--tint) / 0.06);
+    backdrop-filter: blur(26px) saturate(190%);
+    -webkit-backdrop-filter: blur(26px) saturate(190%);
+    border: 1px solid rgb(var(--tint) / 0.1);
+    box-shadow:
+      inset 0 2px 5px rgb(0 0 0 / 0.4),
+      inset 0 -1px 0 rgb(var(--tint) / 0.06);
+  }
+
+  [data-theme='light'] .pill-track {
+    background: rgb(9 9 11 / 0.05);
+    border-color: rgb(9 9 11 / 0.07);
+    box-shadow: inset 0 2px 4px rgb(9 9 11 / 0.08);
+  }
+
+  .pill-item {
+    @apply relative cursor-pointer select-none whitespace-nowrap font-semibold;
+    border-radius: 999px;
+    color: var(--text-tertiary);
+    transition:
+      color 0.18s ease,
+      transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .pill-item:hover {
+    color: var(--text-secondary);
+  }
+
+  .pill-item:active {
+    transform: scale(0.96);
+  }
+
+  .pill-item[data-selected='true'] {
+    color: var(--text-primary);
+  }
+
+  /*
+   * The moving thumb. A separate absolutely-positioned element rather than a
+   * background on the selected item, so framer-motion can slide ONE object
+   * between segments — the detail that makes the control feel physical rather
+   * than repainted.
+   */
+  .pill-thumb {
+    position: absolute;
+    inset: 0;
+    border-radius: 999px;
+    background: linear-gradient(
+      180deg,
+      rgb(var(--tint) / 0.18) 0%,
+      rgb(var(--tint) / 0.1) 100%
+    );
+    border: 1px solid rgb(var(--tint) / 0.14);
+    box-shadow:
+      inset 0 1px 0 rgb(var(--tint) / 0.28),
+      0 3px 10px -3px rgb(0 0 0 / 0.6);
+  }
+
+  /*
+   * Solid thumb for primary navigation.
+   *
+   * The reference marks the current section with a fully opaque light chip
+   * against dark glass — maximum contrast on the one control that answers
+   * "where am I". A translucent thumb cannot do that job, so navigation gets
+   * its own variant rather than reusing the view-preference styling.
+   */
+  .pill-thumb-solid {
+    background: var(--text-primary);
+    border-color: transparent;
+    box-shadow:
+      inset 0 -1px 0 rgb(0 0 0 / 0.12),
+      0 4px 14px -4px rgb(0 0 0 / 0.55);
+  }
+
+  [data-theme='light'] .pill-thumb {
+    background: #ffffff;
+    border-color: rgb(9 9 11 / 0.06);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.9),
+      0 2px 8px -3px rgb(9 9 11 / 0.18);
+  }
+
+  /*
+   * Both of these must out-rank the light-mode `.pill-thumb` rule above, which
+   * paints the thumb solid white. Without them light mode rendered a white
+   * chip carrying white text — the active nav item and the selected chart
+   * range were both invisible.
+   */
+  [data-theme='light'] .pill-thumb.pill-thumb-solid {
+    background: var(--text-primary);
+    border-color: transparent;
+  }
+
+  /* Inside a colour field the thumb keeps its dark-mode treatment in BOTH
+     themes, because the surface underneath is dark either way. */
+  .on-color .pill-thumb {
+    background: linear-gradient(180deg, rgb(255 255 255 / 0.26) 0%, rgb(255 255 255 / 0.16) 100%);
+    border-color: rgb(255 255 255 / 0.24);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.34),
+      0 3px 10px -3px rgb(0 0 0 / 0.5);
+  }
+
+  /* Brand-accented thumb, for the one control where selection is a MODE
+     (Real/Paper) rather than a view preference. */
+  .pill-thumb-accent {
+    background: var(--accent-blue);
+    border-color: transparent;
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.22),
+      0 3px 12px -4px rgb(var(--accent-blue-rgb) / 0.7);
+  }
+
+  /* A single glass button (not a segmented track): search, bell, theme. */
+  .glass-button {
+    @apply inline-flex cursor-pointer select-none items-center justify-center gap-2;
+    border-radius: 999px;
+    color: var(--text-secondary);
+    transition:
+      color 0.18s ease,
+      background-color 0.18s ease,
+      transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+    @apply glass-control;
+  }
+
+  .glass-button:hover {
+    color: var(--text-primary);
+    background: rgb(var(--tint) / 0.09);
+  }
+
+  [data-theme='light'] .glass-button:hover {
+    background: rgb(255 255 255 / 0.92);
+  }
+
+  /*
+   * Pressed. The button moves DOWN a hair and its highlight inverts — the top
+   * inset goes dark, the bottom picks up light — which is what a physical key
+   * does when it travels. Scale alone reads as a web hover effect.
+   */
+  .glass-button:active {
+    transform: translateY(0.5px) scale(0.97);
+    box-shadow:
+      inset 0 2px 5px rgb(0 0 0 / 0.4),
+      inset 0 -1px 0 rgb(var(--tint) / 0.1),
+      0 2px 8px -6px rgb(0 0 0 / 0.6);
+  }
+
+  [data-theme='light'] .glass-button:active {
+    box-shadow:
+      inset 0 2px 5px rgb(9 9 11 / 0.12),
+      0 2px 8px -6px rgb(9 9 11 / 0.18);
+  }
+
+  /* ========================================================= scroll-none */
+  /*
+   * Horizontal scroll without a visible bar. For the chrome's nav and market
+   * rail, and the watchlist ticker strip: these overflow BY DESIGN on narrow
+   * viewports, and a 10px track under a 14px-tall row of nav labels reads as a
+   * rendering fault rather than as an affordance. The content still scrolls by
+   * wheel, trackpad, touch and keyboard — only the bar is hidden.
+   */
+  .scroll-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scroll-none::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+
   /* ============================================================ ambient */
   /*
    * The aurora, scoped. Applied by the landing hero and the auth pages, where
@@ -567,6 +1118,451 @@
   }
   .lift-hover:hover {
     transform: translateY(-2px);
+  }
+
+  /* ======================================================================
+     APPROVED DESIGN SYSTEM — authenticated app only
+     ----------------------------------------------------------------------
+     Values taken verbatim from the seven approved Claude Design files
+     (`Everest Dashboard v2 / Portfolio / Watchlist / Ticker Detail /
+     Options / AI Insights / Settings`).
+
+     THE ONE RULE THIS BLOCK EXISTS TO ENFORCE:
+
+       Every token here is declared on `.app-theme` — never on `:root`.
+
+     The landing page is frozen. It renders the SAME class names as the
+     product (`rounded-card`, `.card`, `.num`, `text-accent`), and Tailwind
+     resolves those to `var(--radius-card)` / `var(--accent-blue-rgb)` at the
+     use site. So re-pitching a variable on `:root` would silently restyle a
+     frozen page. Re-pitching it on `.app-theme` — the wrapper AppLayout
+     already renders — reaches /app and stops there.
+
+     `components/landing/panels.jsx` consumes `--radius-card` directly. That
+     is the specific reason the radius scale is overridden here and not in
+     styles/tokens.css.
+
+     Placed at the END of @layer components so it out-orders the earlier
+     `.app-theme` declarations at equal specificity.
+     ====================================================================== */
+  .app-theme {
+    /* ---- Typography ------------------------------------------------- */
+    font-family: 'Instrument Sans', Inter, ui-sans-serif, system-ui, sans-serif;
+    /*
+     * Tabular figures for the WHOLE product, matching the designs' `body`
+     * rule. On a surface that polls every 30 seconds this is a correctness
+     * feature, not a stylistic one: proportional digits let a changing value
+     * reflow its own column.
+     */
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+
+    /* ---- Radius: 20px primary, 14px nested, 10px control ------------- */
+    /*
+     * The approved files use 20px on primary surfaces across six of seven
+     * screens (Dashboard v2 alone drew 22px). Per direction, 20px is the
+     * standard and the 22px exception is not carried forward.
+     */
+    --radius-surface: 20px;
+    --radius-nested: 14px;
+
+    --radius-card: 20px;
+    --radius-module: 20px;
+    --radius-panel: 14px;
+    --radius-control: 10px;
+
+    /* ---- Surfaces: pure neutral, four planes ------------------------- */
+    --bg-base: #0a0a0c;
+    --bg-base-rgb: 10 10 12;
+    --bg-surface: #141417;
+    --bg-surface-rgb: 20 20 23;
+    --bg-card: #141417;
+    --bg-card-rgb: 20 20 23;
+    --bg-card-hover: #1b1b20;
+    --bg-card-hover-rgb: 27 27 32;
+
+    --frame-canvas: #0a0a0c;
+    --panel-bg: #141417;
+    --panel-border: rgba(255, 255, 255, 0.08);
+    --nested-bg: #1b1b20;
+    --nested-border: rgba(255, 255, 255, 0.08);
+
+    --e0-bg: #1b1b20;
+    --e0-border: rgba(255, 255, 255, 0.06);
+    --e1-bg: #1b1b20;
+    --e1-border: rgba(255, 255, 255, 0.08);
+    --e2-bg: #141417;
+    --e2-border: rgba(255, 255, 255, 0.08);
+    --e3-bg: #24242b;
+    --e3-border: rgba(255, 255, 255, 0.16);
+
+    /*
+     * Meter and bar TRACKS get their own token rather than reusing a well.
+     * In this palette a track is LIGHTER than the panel it sits on (the
+     * designs' --pnl3), which is the opposite of how `.well` behaves — so
+     * conflating the two would invert every progress bar in the product.
+     */
+    --track-bg: #24242b;
+
+    --border: rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.16);
+
+    /* ---- Ink --------------------------------------------------------- */
+    /*
+     * The designs express these as alpha over the panel. They are flattened
+     * to solids here because Tailwind's `text-text-secondary` needs real
+     * channels to apply opacity modifiers against — an alpha-on-alpha token
+     * makes `text-text-secondary/70` mean nothing predictable.
+     */
+    --text-primary: #f7f7f9;
+    --text-primary-rgb: 247 247 249;
+    --text-secondary: #9c9c9f;
+    --text-secondary-rgb: 156 156 159;
+    --text-tertiary: #66666a;
+
+    /* ---- Semantics --------------------------------------------------- */
+    /* Brand — active selection and primary action ONLY. */
+    --accent-blue: #2f6bff;
+    --accent-blue-rgb: 47 107 255;
+    --brand-2: #1b49d6;
+    --brand-ink: #ffffff;
+    --brand-soft: rgba(47, 107, 255, 0.16);
+    --brand-gradient: linear-gradient(150deg, #2f6bff 0%, #1b49d6 100%);
+
+    /* Direction — financial only, never decoration. */
+    --accent-green: #35d48f;
+    --accent-green-rgb: 53 212 143;
+    --accent-red: #ff5a64;
+    --accent-red-rgb: 255 90 100;
+    --up-soft: rgba(53, 212, 143, 0.16);
+    --down-soft: rgba(255, 90, 100, 0.16);
+
+    /* Amber — time-sensitive attention and expiry. */
+    --accent-amber: #f5a524;
+    --accent-amber-rgb: 245 165 36;
+    --warn-soft: rgba(245, 165, 36, 0.14);
+
+    /* ---- Glass: chrome and controls only ----------------------------- */
+    /*
+     * Chrome sits at the BASE colour, not the panel colour.
+     *
+     * First pass tinted it to `--panel-bg` — which is also what the nav track
+     * and every glass button are filled with, so the controls were the same
+     * value as the bar behind them and visually dissolved. In the approved
+     * shell the bar IS the canvas and the controls are panels floating on it.
+     * That one-step separation is what makes navigation read as an object
+     * rather than as six words.
+     */
+    --chrome-bg: rgba(10, 10, 12, 0.78);
+    --glass-bg: rgba(20, 20, 23, 0.72);
+    --glass-border: rgba(255, 255, 255, 0.11);
+    /* The lighter fill the designs use behind search inputs and filter pills. */
+    --glass-soft: rgba(255, 255, 255, 0.05);
+    --glass-soft-border: rgba(255, 255, 255, 0.11);
+
+    /* ---- Elevation --------------------------------------------------- */
+    /* One shadow, an inset top highlight plus a deep drop — the designs'
+       `--sh`. Depth comes from the highlight, not from a heavy border. */
+    --shadow-surface: 0 1px 0 rgba(255, 255, 255, 0.05) inset,
+      0 26px 60px -36px rgba(0, 0, 0, 1);
+    --shadow-e2: var(--shadow-surface);
+    --shadow-e3: 0 1px 0 rgba(255, 255, 255, 0.06) inset,
+      0 22px 44px -18px rgba(0, 0, 0, 0.95);
+
+    /* ---- Hatching: encoded secondary state --------------------------- */
+    /*
+     * NOT texture. In the approved designs a 45° hatch is a MEANING: a value
+     * that is derived rather than observed, a row carried at cost because no
+     * quote arrived, a put as against a call, a ribbon segment too narrow to
+     * label. It is the one encoding that survives greyscale and colour-blind
+     * viewing, which is why selected/derived states are never colour-only.
+     */
+    --hatch-light: repeating-linear-gradient(
+      45deg,
+      rgba(255, 255, 255, 0.22) 0 1.5px,
+      transparent 1.5px 6px
+    );
+    --hatch-dim: repeating-linear-gradient(
+      45deg,
+      rgba(255, 255, 255, 0.1) 0 1.5px,
+      transparent 1.5px 7px
+    );
+    --hatch-warn: repeating-linear-gradient(
+      45deg,
+      rgba(245, 165, 36, 0.34) 0 1.5px,
+      transparent 1.5px 7px
+    );
+    --hatch-strong: repeating-linear-gradient(
+      45deg,
+      rgba(247, 247, 249, 0.5) 0 1.5px,
+      transparent 1.5px 5px
+    );
+
+    /* Tooltip surface — one definition for the four pages that float one. */
+    --tip-bg: #000000;
+    --tip-border: rgba(255, 255, 255, 0.14);
+  }
+
+  [data-theme='light'] .app-theme {
+    --bg-base: #e9e9ec;
+    --bg-base-rgb: 233 233 236;
+    --bg-surface: #ffffff;
+    --bg-surface-rgb: 255 255 255;
+    --bg-card: #ffffff;
+    --bg-card-rgb: 255 255 255;
+    --bg-card-hover: #f5f5f7;
+    --bg-card-hover-rgb: 245 245 247;
+
+    --frame-canvas: #e9e9ec;
+    --panel-bg: #ffffff;
+    --panel-border: rgba(10, 10, 12, 0.09);
+    --nested-bg: #f5f5f7;
+    --nested-border: rgba(10, 10, 12, 0.09);
+
+    --e0-bg: #f5f5f7;
+    --e0-border: rgba(10, 10, 12, 0.07);
+    --e1-bg: #f5f5f7;
+    --e1-border: rgba(10, 10, 12, 0.09);
+    --e2-bg: #ffffff;
+    --e2-border: rgba(10, 10, 12, 0.09);
+    --e3-bg: #ffffff;
+    --e3-border: rgba(10, 10, 12, 0.18);
+
+    --track-bg: #ececef;
+
+    --border: rgba(10, 10, 12, 0.09);
+    --border-strong: rgba(10, 10, 12, 0.18);
+
+    --text-primary: #0a0a0c;
+    --text-primary-rgb: 10 10 12;
+    --text-secondary: #67676a;
+    --text-secondary-rgb: 103 103 106;
+    --text-tertiary: #9d9d9f;
+
+    /*
+     * Brand does NOT flip between themes. A single blue across both is what
+     * makes "this is the current route" the same signal wherever you are.
+     * Direction colours DO flip, because green/red have to hold contrast
+     * against very different backgrounds to stay readable as figures.
+     */
+    --accent-blue: #2f6bff;
+    --accent-blue-rgb: 47 107 255;
+    --brand-2: #1b49d6;
+    --brand-soft: rgba(47, 107, 255, 0.12);
+
+    --accent-green: #0a9c68;
+    --accent-green-rgb: 10 156 104;
+    --accent-red: #db2b3c;
+    --accent-red-rgb: 219 43 60;
+    --up-soft: rgba(10, 156, 104, 0.12);
+    --down-soft: rgba(219, 43, 60, 0.11);
+
+    --accent-amber: #b26a00;
+    --accent-amber-rgb: 178 106 0;
+    --warn-soft: rgba(178, 106, 0, 0.12);
+
+    --tint: 10 10 12;
+
+    /* Canvas grey, not white — same reasoning as dark. A white bar carrying
+       white controls is the light-mode form of the same disappearing act. */
+    --chrome-bg: rgba(233, 233, 236, 0.82);
+    --glass-bg: rgba(255, 255, 255, 0.7);
+    --glass-border: rgba(10, 10, 12, 0.1);
+    --glass-soft: rgba(255, 255, 255, 0.7);
+    --glass-soft-border: rgba(10, 10, 12, 0.1);
+
+    --shadow-surface: 0 1px 2px rgba(10, 10, 12, 0.05),
+      0 20px 44px -32px rgba(10, 10, 12, 0.45);
+    --shadow-e2: var(--shadow-surface);
+    --shadow-e3: 0 1px 2px rgba(10, 10, 12, 0.06),
+      0 22px 44px -18px rgba(10, 10, 12, 0.32);
+
+    --hatch-light: repeating-linear-gradient(
+      45deg,
+      rgba(255, 255, 255, 0.3) 0 1.5px,
+      transparent 1.5px 6px
+    );
+    --hatch-dim: repeating-linear-gradient(
+      45deg,
+      rgba(10, 10, 12, 0.09) 0 1.5px,
+      transparent 1.5px 7px
+    );
+    --hatch-warn: repeating-linear-gradient(
+      45deg,
+      rgba(178, 106, 0, 0.28) 0 1.5px,
+      transparent 1.5px 7px
+    );
+    --hatch-strong: repeating-linear-gradient(
+      45deg,
+      rgba(10, 10, 12, 0.42) 0 1.5px,
+      transparent 1.5px 5px
+    );
+
+    --tip-bg: #111114;
+    --tip-border: rgba(255, 255, 255, 0.16);
+  }
+
+  /* ---- Archivo carries headings and every financial figure ----------- */
+  /*
+   * Scoped to `.app-theme` and to the specific classes rather than to bare
+   * h1/h2/h3: `.t-eyebrow` is applied to <h2> in Panel, and an uppercase
+   * field label set in the display face reads as a heading it is not.
+   */
+  .app-theme :is(.t-hero, .t-display, .t-page-title, .t-module, .t-figure, .num-hero, .num) {
+    font-family: 'Archivo', Inter, ui-sans-serif, system-ui, sans-serif;
+  }
+
+  /*
+   * `.num` stops being monospace inside the product.
+   *
+   * JetBrains Mono renders a figure as a terminal readout. Archivo with
+   * `tnum` gives locked digit widths — the only property that actually
+   * mattered — while reading as a number in a financial interface. The
+   * landing keeps the mono treatment.
+   */
+  .app-theme .num {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum';
+    font-weight: 600;
+    letter-spacing: -0.025em;
+  }
+
+  .app-theme .num-hero {
+    font-family: 'Archivo', Inter, ui-sans-serif, system-ui, sans-serif;
+    font-weight: 800;
+    letter-spacing: -0.05em;
+  }
+
+  /*
+   * Primary navigation reads as a RAISED panel, not a recessed well.
+   *
+   * The earlier track was an inset glass groove. The approved shell floats
+   * the nav on the canvas with the same surface treatment as every other
+   * panel, which is what makes the top bar read as one system with the page
+   * rather than as browser chrome bolted above it.
+   */
+  .app-theme .pill-track {
+    background: var(--panel-bg);
+    border-color: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow: var(--shadow-surface);
+  }
+
+  /*
+   * ...EXCEPT on a colour field.
+   *
+   * `.on-color` marks a control sitting on the Dashboard's blue performance
+   * panel, which is dark in BOTH themes. The rule above paints the track with
+   * `--panel-bg`, which is white in light mode — so the chart's range control
+   * became a white slab carrying white labels and disappeared entirely.
+   *
+   * Here the track keys off the field, not the app theme: a dark scrim with
+   * white ink, and a white thumb carrying brand ink, exactly as the approved
+   * Dashboard draws it.
+   */
+  .app-theme .on-color .pill-track {
+    background: rgb(0 0 0 / 0.22);
+    border-color: rgb(255 255 255 / 0.14);
+    box-shadow: none;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+
+  .app-theme .on-color .pill-item {
+    color: rgb(255 255 255 / 0.72);
+  }
+
+  .app-theme .on-color .pill-item:hover {
+    color: #ffffff;
+  }
+
+  .app-theme .on-color .pill-item[data-selected='true'] {
+    color: var(--brand-2);
+  }
+
+  .app-theme .on-color .pill-thumb {
+    background: #ffffff;
+    border-color: transparent;
+    box-shadow: 0 2px 8px -3px rgb(0 0 0 / 0.5);
+  }
+
+  /*
+   * An UNSELECTED toggle on the colour field.
+   *
+   * `glass-button` fills with a white-tinted overlay, which over Everest blue
+   * produced a pale-blue solid — the "vs SPY" chip read as switched ON while
+   * the benchmark was off. Matching the range track's scrim makes off look
+   * off; the chip's own active style (solid accent + white ink) still wins,
+   * because it is applied inline.
+   */
+  .app-theme .on-color .glass-button {
+    background: rgb(0 0 0 / 0.22);
+    border-color: rgb(255 255 255 / 0.14);
+    color: rgb(255 255 255 / 0.78);
+    box-shadow: none;
+  }
+
+  .app-theme .on-color .glass-button:hover {
+    background: rgb(0 0 0 / 0.3);
+    color: #ffffff;
+  }
+
+  /*
+   * THE ACCENT THUMB MUST SURVIVE LIGHT MODE.
+   *
+   * `[data-theme='light'] .pill-thumb` paints the thumb solid white, and at
+   * (0,2,0) it out-ranks the bare `.pill-thumb-accent` class at (0,1,0). With
+   * the nav chip moved from `-solid` to `-accent`, light mode therefore
+   * rendered a WHITE chip carrying `--brand-ink` WHITE text: the active route
+   * label — "Portfolio" — was completely invisible.
+   *
+   * The file already carries the same guard for `.pill-thumb-solid` a few
+   * hundred lines up, written after this exact bug. The `-accent` variant
+   * needed its own, and this is it.
+   */
+  [data-theme='light'] .app-theme .pill-thumb.pill-thumb-accent {
+    background: var(--accent-blue);
+    border-color: transparent;
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.24),
+      0 4px 14px -5px rgb(var(--accent-blue-rgb) / 0.6);
+  }
+
+  /*
+   * A segment sitting on the accent thumb takes brand ink.
+   *
+   * `.pill-item[data-selected='true']` sets `--text-primary`, which is white
+   * on dark but near-BLACK on light — so Real/Paper and every accent-toned
+   * Segmented rendered dark navy text on an Everest-blue chip. The nav sets
+   * its own ink inline; this covers `ui/Segmented`, which does not.
+   */
+  .app-theme .pill-item[data-selected='true']:has(.pill-thumb-accent) {
+    color: var(--brand-ink);
+  }
+
+  /* ---- Hatch utilities ---------------------------------------------- */
+  /*
+   * Applied as a background IMAGE over a background COLOR, so the colour
+   * still carries direction (green/red/brand) while the hatch carries the
+   * secondary encoding. They are orthogonal channels on purpose.
+   */
+  .hatch-light {
+    background-image: var(--hatch-light);
+  }
+  .hatch-dim {
+    background-image: var(--hatch-dim);
+  }
+  .hatch-warn {
+    background-image: var(--hatch-warn);
+  }
+  .hatch-strong {
+    background-image: var(--hatch-strong);
+  }
+
+  /* A meter/bar track. Distinct from `.well` — see --track-bg above. */
+  .track {
+    background-color: var(--track-bg);
   }
 }
 

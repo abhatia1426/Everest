@@ -16,6 +16,19 @@ export function fmtSignedMoney(value, { dash = '—' } = {}) {
   return `${sign}${currency.format(Math.abs(value))}`
 }
 
+/**
+ * Whole-dollar money, for headline figures where cents are noise.
+ *
+ * Used by the Options band and the contract workspace, where the approved
+ * design rounds every summary figure: "$18,412" reads as a magnitude, and
+ * "$18,412.37" invites a precision the estimate behind it does not have.
+ */
+export function fmtMoneyRounded(value, { dash = '—', signed = false } = {}) {
+  if (value === null || value === undefined || Number.isNaN(value)) return dash
+  const sign = signed ? (value > 0 ? '+' : value < 0 ? '−' : '') : value < 0 ? '−' : ''
+  return `${sign}$${Math.round(Math.abs(value)).toLocaleString('en-US')}`
+}
+
 export function fmtPercent(value, { dash = '—', signed = true } = {}) {
   if (value === null || value === undefined || Number.isNaN(value)) return dash
   const sign = signed ? (value > 0 ? '+' : value < 0 ? '−' : '') : ''

@@ -19,14 +19,22 @@ function NightGlyph() {
   )
 }
 
-/** Green candle — the dark-mode accent, with a soft glow. */
-function CandleGlyph() {
+/**
+ * Moon — the dark-mode accent.
+ *
+ * This slot used to hold a GREEN CANDLE. Under the approved semantic system
+ * green means one thing only — financial direction — so spending it on a
+ * theme switch made the chrome argue with the data. A moon says "dark mode"
+ * without borrowing a colour that has a job.
+ */
+function MoonGlyph() {
   return (
-    <svg width="12" height="14" viewBox="0 0 12 14" fill="none" aria-hidden="true">
-      <g style={{ filter: 'drop-shadow(0 0 3px rgba(0,214,143,0.9))' }}>
-        <line x1="6" y1="1" x2="6" y2="13" stroke="#00d68f" strokeWidth="1.1" />
-        <rect x="3.2" y="4" width="5.6" height="6.4" rx="1" fill="#00d68f" />
-      </g>
+    <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <path
+        d="M11.6 8.6A5.2 5.2 0 0 1 5.4 2.4 5.2 5.2 0 1 0 11.6 8.6Z"
+        fill="currentColor"
+        opacity="0.85"
+      />
     </svg>
   )
 }
@@ -35,35 +43,37 @@ function CandleGlyph() {
 function SnowPeakGlyph() {
   return (
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-      <path d="M1 12.4 L5 5.6 L7.4 9.6 L9 7 L13 12.4 Z" fill="#3b6ff0" opacity="0.75" />
+      <path
+        d="M1 12.4 L5 5.6 L7.4 9.6 L9 7 L13 12.4 Z"
+        fill="var(--accent-blue)"
+        opacity="0.8"
+      />
       <path d="M5 5.6 L6.6 8.3 L5.8 7.7 L5 8.5 L4.2 7.7 Z" fill="#ffffff" />
       <path d="M9 7 L10.2 8.7 L9.6 8.3 L9 8.9 L8.4 8.3 Z" fill="#ffffff" />
     </svg>
   )
 }
 
-/** Sun — replaces the candle in light mode. */
+/** Sun — the light-mode accent. Amber, from the token, without the glow. */
 function SunGlyph() {
   return (
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-      <g style={{ filter: 'drop-shadow(0 0 3px rgba(251,191,36,0.9))' }}>
-        <circle cx="7" cy="7" r="3.1" fill="#fbbf24" />
-        {[0, 45, 90, 135, 180, 225, 270, 315].map((deg) => {
-          const rad = (deg * Math.PI) / 180
-          return (
-            <line
-              key={deg}
-              x1={7 + Math.cos(rad) * 4.4}
-              y1={7 + Math.sin(rad) * 4.4}
-              x2={7 + Math.cos(rad) * 5.9}
-              y2={7 + Math.sin(rad) * 5.9}
-              stroke="#fbbf24"
-              strokeWidth="1.1"
-              strokeLinecap="round"
-            />
-          )
-        })}
-      </g>
+      <circle cx="7" cy="7" r="3" fill="var(--accent-amber)" />
+      {[0, 45, 90, 135, 180, 225, 270, 315].map((deg) => {
+        const rad = (deg * Math.PI) / 180
+        return (
+          <line
+            key={deg}
+            x1={7 + Math.cos(rad) * 4.4}
+            y1={7 + Math.sin(rad) * 4.4}
+            x2={7 + Math.cos(rad) * 5.9}
+            y2={7 + Math.sin(rad) * 5.9}
+            stroke="var(--accent-amber)"
+            strokeWidth="1.1"
+            strokeLinecap="round"
+          />
+        )
+      })}
     </svg>
   )
 }
@@ -94,24 +104,19 @@ export function ThemeToggle({ showLabel = true, className = '' }) {
         title={`Switch to ${isDark ? 'light' : 'dark'} mode`}
         className="group relative cursor-pointer rounded-full transition-transform duration-150
           hover:scale-105 focus-visible:outline-2"
+        /*
+         * Track, knob and border now read from tokens instead of the hardcoded
+         * navy gradient (#0d1730 → #16203f) this control shipped with. That
+         * gradient is the LANDING's blue-hour palette; inside the product's
+         * neutral graphite shell it was the one control still tinted blue-black
+         * and it read as a foreign object in the top bar.
+         */
         style={{
           width: TRACK_W,
           height: TRACK_H,
-          background: isDark
-            ? 'linear-gradient(135deg, #0d1730, #16203f)'
-            : 'linear-gradient(135deg, #e8f0ff, #ffffff)',
-          border: `1px solid ${isDark ? 'rgba(255,255,255,0.12)' : 'rgba(59,111,240,0.22)'}`,
-          boxShadow: isDark
-            ? '0 0 0 0 rgba(79,142,255,0)'
-            : '0 0 0 0 rgba(59,111,240,0)',
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.boxShadow = isDark
-            ? '0 0 14px rgba(79,142,255,0.45)'
-            : '0 0 14px rgba(59,111,240,0.35)'
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.boxShadow = 'none'
+          background: 'var(--panel-bg)',
+          border: '1px solid var(--border-strong)',
+          boxShadow: 'none',
         }}
       >
         {/* Left slot */}
@@ -130,10 +135,10 @@ export function ThemeToggle({ showLabel = true, className = '' }) {
 
         {/* Right slot */}
         <span
-          className="pointer-events-none absolute inset-y-0 right-0 grid place-items-center transition-opacity duration-300"
+          className="pointer-events-none absolute inset-y-0 right-0 grid place-items-center text-text-secondary transition-opacity duration-300"
           style={{ width: TRACK_H, opacity: isDark ? 1 : 0 }}
         >
-          <CandleGlyph />
+          <MoonGlyph />
         </span>
         <span
           className="pointer-events-none absolute inset-y-0 right-0 grid place-items-center transition-opacity duration-300"
@@ -153,10 +158,8 @@ export function ThemeToggle({ showLabel = true, className = '' }) {
             height: KNOB,
             y: '-50%',
             left: 0,
-            background: isDark
-              ? 'linear-gradient(160deg, #ffffff, #cdd8f0)'
-              : 'linear-gradient(160deg, #ffffff, #dce6ff)',
-            boxShadow: '0 2px 6px rgba(0,0,0,0.28)',
+            background: 'var(--text-primary)',
+            boxShadow: '0 2px 6px rgb(0 0 0 / 0.28)',
           }}
         />
       </button>

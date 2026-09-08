@@ -40,7 +40,7 @@ export function deriveInsights({ pnl, watchlist = [] } = {}) {
         id: 'sector-concentration',
         tone: weight >= 65 ? 'warn' : 'info',
         label: 'Concentration',
-        text: `${weight.toFixed(0)}% of your book sits in ${topSector.sector}.`,
+        text: `${weight.toFixed(0)}% of your portfolio sits in ${topSector.sector}.`,
       })
     }
   }
@@ -60,6 +60,36 @@ export function deriveInsights({ pnl, watchlist = [] } = {}) {
         text: `${largest.ticker} is ${weight.toFixed(0)}% of your portfolio value.`,
       })
     }
+  }
+
+  // --- breadth today ------------------------------------------------------
+  /*
+   * How many holdings are down, and the net dollar change. Both are already
+   * on the page (the movers bars, the day figure); stating them as one
+   * sentence answers "was today broad or was it one name" without the user
+   * having to add up six bars.
+   *
+   * Only counts holdings that HAVE a measured move — a position carried at
+   * cost basis has no day change, and counting it as "flat" would assert
+   * something we did not measure.
+   */
+  const measured = positions.filter(
+    (p) => typeof p.change_percent === 'number' && !p.price_stale,
+  )
+  if (measured.length >= 3) {
+    const down = measured.filter((p) => p.change_percent < 0).length
+    const net = pnl?.day_change ?? 0
+    insights.push({
+      id: 'breadth-today',
+      tone: net >= 0 ? 'up' : 'down',
+      label: 'Breadth today',
+      text: `${down} of ${measured.length} priced holdings are down; the portfolio's net change is ${
+        net >= 0 ? '+' : '−'
+      }$${Math.abs(net).toLocaleString('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })}.`,
+    })
   }
 
   // --- holdings breadth ---------------------------------------------------

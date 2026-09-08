@@ -18,6 +18,7 @@ function read() {
       down: '#ff4d6a',
       textPrimary: '#f0f0f5',
       textSecondary: '#7a7a9a',
+      textTertiary: '#6b6b73',
       card: '#13151d',
       base: '#08090e',
       border: 'rgba(255,255,255,0.07)',
@@ -26,7 +27,17 @@ function read() {
     }
   }
 
-  const styles = getComputedStyle(document.documentElement)
+  /*
+   * Read from the APP root when there is one, not from <html>.
+   *
+   * The authenticated product re-declares its surface, text and chart ramps on
+   * `.app-theme` so the landing keeps the palette it was designed against.
+   * Those overrides are invisible to `getComputedStyle(documentElement)`, so
+   * charts kept rendering the global scale — the allocation band was still
+   * drawing a violet series after the product had removed violet entirely.
+   */
+  const root = document.querySelector('.app-theme') || document.documentElement
+  const styles = getComputedStyle(root)
   const value = (name, fallback) => styles.getPropertyValue(name).trim() || fallback
 
   return {
@@ -35,6 +46,7 @@ function read() {
     down: value('--accent-red', '#ff4d6a'),
     textPrimary: value('--text-primary', '#f0f0f5'),
     textSecondary: value('--text-secondary', '#7a7a9a'),
+    textTertiary: value('--text-tertiary', '#7a7a9a'),
     card: value('--bg-card', '#13151d'),
     base: value('--bg-base', '#08090e'),
     border: value('--border', 'rgba(255,255,255,0.07)'),

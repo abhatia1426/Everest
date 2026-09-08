@@ -1,76 +1,112 @@
 import { Link } from 'react-router-dom'
-import { ArrowRight } from 'lucide-react'
 
 import { Skeleton } from '../States'
-import { Panel } from '../ui/Surface'
 
 /**
- * Observations measured from the user's own book (see lib/insights) — not
- * generated text. The AI tools are a separate, clearly-labelled surface, and
- * conflating the two would be a trust problem, not a layout one.
+ * "Needs a look" — measurements, not generated prose.
  *
- * Treated as an accent-edged typographic list rather than nested cards: v2
- * gave each insight its own tinted, bordered box, so three observations
- * produced three competing colour fields inside one panel.
+ * Every string here restates arithmetic performed on the user's own positions
+ * and watchlist in lib/insights.js. Nothing is model-generated, and the
+ * `derived` badge says so on the surface rather than in a comment: the AI
+ * workspace is a separate, clearly-labelled destination, and letting a
+ * deterministic measurement and a Gemini sentence share one visual treatment
+ * would be a trust problem rather than a layout one.
+ *
+ * The badge is neutral, never brand blue. Blue is reserved for selection and
+ * primary action; a provenance label is neither.
  */
-const TONE_COLOR = {
-  info: 'var(--accent-blue)',
-  warn: 'var(--accent-amber)',
-  up: 'var(--accent-green)',
-  down: 'var(--accent-red)',
+
+/*
+ * A small square glyph per observation, tinted by tone.
+ *
+ * `warn` is amber ONLY where the observation is genuinely time-sensitive or
+ * degraded (stale quotes). Concentration is structural, not urgent, so it
+ * takes brand blue; direction takes green or red. Spending amber on ordinary
+ * facts is what makes a real warning stop registering.
+ */
+const TONE = {
+  info: { glyph: '%', color: 'var(--accent-blue)', bg: 'var(--brand-soft)' },
+  warn: { glyph: '!', color: 'var(--accent-amber)', bg: 'var(--warn-soft)' },
+  up: { glyph: '↑', color: 'var(--accent-green)', bg: 'var(--up-soft)' },
+  down: { glyph: '↓', color: 'var(--accent-red)', bg: 'var(--down-soft)' },
 }
 
 export function InsightRail({ insights = [], loading }) {
   return (
-    <Panel
-      title="What stands out"
-      action={
-        <Link
-          to="/app/ai"
-          className="inline-flex cursor-pointer items-center gap-1 text-[11px] font-semibold
-            text-accent transition-opacity duration-150 hover:opacity-80"
+    <section className="module" style={{ padding: 20 }}>
+      <div className="flex items-center gap-[9px]">
+        <h2 className="font-display text-[19px] font-bold tracking-[-0.035em] text-text-primary">
+          Needs a look
+        </h2>
+        {/* The design's provenance chip: 10.5px/600 on --pnl2. It is the one
+            place this module says it is measured rather than generated. */}
+        <span
+          className="rounded-full text-[10.5px] font-semibold text-text-tertiary"
+          style={{ padding: '3px 8px', background: 'var(--nested-bg)' }}
         >
-          AI tools
-          <ArrowRight size={12} />
-        </Link>
-      }
-    >
+          derived
+        </span>
+      </div>
+
       {loading ? (
-        <div className="space-y-3">
+        <div className="mt-3 space-y-4">
           {[0, 1, 2].map((i) => (
-            <Skeleton key={i} className="h-12 w-full rounded-panel" />
+            <Skeleton key={i} className="h-11 w-full" />
           ))}
         </div>
       ) : insights.length === 0 ? (
-        <p className="px-1 py-10 text-center text-[13px] text-text-secondary">
-          Observations appear as your book grows. Everything here is measured from your own
-          holdings — for generated analysis, use the AI tools.
+        <p className="py-8 text-[13px] leading-relaxed text-text-secondary">
+          Observations appear as your portfolio grows. Everything here is measured from your own
+          holdings — for written analysis, use the AI tools.
         </p>
       ) : (
-        <ul className="space-y-3.5">
-          {insights.map((insight) => (
-            <li
-              key={insight.id}
-              className="border-l-2 pl-3.5"
-              style={{ borderColor: TONE_COLOR[insight.tone] || TONE_COLOR.info }}
-            >
-              <p className="t-eyebrow">{insight.label}</p>
-              <p className="mt-1 text-[13px] leading-relaxed text-text-primary">
-                {insight.ticker ? (
-                  <Link
-                    to={`/app/ticker/${insight.ticker}`}
-                    className="cursor-pointer transition-colors duration-150 hover:text-accent"
+        <ul className="mt-1.5">
+            {insights.slice(0, 3).map((insight) => {
+              const tone = TONE[insight.tone] || TONE.info
+              const body = (
+                <>
+                  <span
+                    className="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-[9px]
+                      font-display text-[12px] font-bold"
+                    style={{ background: tone.bg, color: tone.color }}
+                    aria-hidden="true"
                   >
-                    {insight.text}
-                  </Link>
-                ) : (
-                  insight.text
-                )}
-              </p>
-            </li>
-          ))}
+                    {tone.glyph}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-[12.5px] font-bold tracking-[-0.01em] text-text-primary">
+                      {insight.label}
+                    </span>
+                    <span className="mt-[3px] block text-[11.5px] leading-[1.45] text-text-secondary">
+                      {insight.text}
+                    </span>
+                  </span>
+                </>
+              )
+
+              return (
+                <li
+                  key={insight.id}
+                  style={{ borderBottom: '1px solid var(--border)' }}
+                >
+                  {insight.ticker ? (
+                    <Link
+                      to={`/app/ticker/${insight.ticker}`}
+                      className="flex gap-[11px] transition-opacity duration-150 hover:opacity-80"
+                      style={{ padding: '12px 0' }}
+                    >
+                      {body}
+                    </Link>
+                  ) : (
+                    <div className="flex gap-[11px]" style={{ padding: '12px 0' }}>
+                      {body}
+                    </div>
+                  )}
+                </li>
+              )
+            })}
         </ul>
       )}
-    </Panel>
+    </section>
   )
 }

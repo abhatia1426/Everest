@@ -1,57 +1,122 @@
 import { useCallback, useDeferredValue, useMemo, useState } from 'react'
 import { Briefcase, Plus } from 'lucide-react'
 
-import { PageHeader } from '../../components/AppLayout'
+import { StaggerGroup, StaggerItem } from '../../components/Motion'
 import { EmptyState, ErrorState, Notice } from '../../components/States'
 import { AddPositionModal } from '../../components/portfolio/AddPositionModal'
-import { BookSummary } from '../../components/portfolio/BookSummary'
-import { HoldingsLedger } from '../../components/portfolio/HoldingsLedger'
+import { ConcentrationRibbon } from '../../components/portfolio/ConcentrationRibbon'
+import { LedgerControls } from '../../components/portfolio/LedgerControls'
+import { PortfolioLedger } from '../../components/portfolio/PortfolioLedger'
+import { PortfolioValueBand } from '../../components/portfolio/PortfolioValueBand'
+import { seriesFor } from '../../components/dashboard/HoldingsPanel'
 import { Surface } from '../../components/ui/Surface'
-import { Toolbar } from '../../components/ui/Toolbar'
 import { useApi } from '../../hooks/useApi'
 import { TTL, invalidate } from '../../lib/cache'
 import { useMode } from '../../hooks/useMode'
 import { useToast } from '../../components/ui/Toast'
+import { useWatchlist } from '../../hooks/useWatchlist'
 import { api } from '../../lib/api'
-import { equityOrFallback } from '../../lib/equitySource'
+import { buildBook, filterHoldings, sortHoldings } from '../../lib/portfolio'
 
 // Re-exported so any existing importer of AddPositionModal keeps working; the
-// component itself now lives with the other portfolio components.
+// component itself lives with the other portfolio components.
 export { AddPositionModal }
 
-const SORTS = [
-  { value: 'value', label: 'Value' },
-  { value: 'pnl', label: 'P&L' },
-  { value: 'ticker', label: 'A-Z' },
-]
-
 /**
- * Portfolio — the asset-management workspace.
+ * Portfolio, composed to the approved `Everest Portfolio.dc.html`.
  *
- * Primary task: compare and manage positions, not admire them. That single
- * answer drives the whole composition:
- *   · a summary band that states the book's totals and composition once
- *   · a toolbar, because a book of thirty positions needs narrowing
- *   · an aligned ledger, because comparison requires columns
+ * FOUR BANDS, in the design's order and proportions:
  *
- * The v2 page rendered a three-column grid of asset cards, which looked
- * considerable but made the primary task impossible — the same figure landed
- * at a different position in every card, so nothing could be scanned down.
+ *   1. the blue value field + Real/Paper, as-of, Add position, 5 metrics
+ *   2. the concentration ribbon, spanning the page
+ *   3. search, sector pills, count
+ *   4. the ledger — the centrepiece — ending on a totals row
+ *
+ * WHY `/pnl` AND NOT `/portfolio`. The two return the same enriched positions,
+ * but `/pnl` also returns the book totals and the realized figure the approved
+ * metric strip asks for. Fetching `/portfolio` and then re-deriving totals on
+ * the client would put two sources of truth for the same numbers one component
+ * apart. Position ids are present in both, so Add and Remove are unchanged.
+ *
+ * WHAT THE DESIGN DRAWS THAT THIS DOES NOT, and why:
+ *
+ * · Realized P/L is not a number here. Nothing in Everest writes a trade
+ *   record — there is no sell, reduce or close — so `/pnl.realized_pnl` is 0.00
+ *   for every user, always. "$0.00" would be a measurement claim; the tile
+ *   reads "Not recorded" instead. See `PortfolioValueBand`.
+ * · The row expansion carries no lots, dividends or tax treatment. They are
+ *   not modelled, and an empty heading asserts that they are.
+ * · The reconstructed history is all-or-nothing and says so on every range.
+ *
+ * Everything else — the ribbon, the diverging contribution bar, the weight
+ * bar, the inline expansion, the sortable heads, the filtered totals — is the
+ * design's, on real data.
  */
 export default function Portfolio() {
-  const { mode } = useMode()
-  const fetcher = useCallback(() => api.portfolio(mode), [mode])
-  const { data, loading, error, refetch } = useApi(fetcher, [mode], { key: `portfolio:${mode}`, ttl: TTL.PORTFOLIO, pollMs: 30000 })
+  const { mode, setMode } = useMode()
+  const fetcher = useCallback(() => api.pnl(mode), [mode])
+  const { data, loading, error, refetch } = useApi(fetcher, [mode], {
+    key: `pnl:${mode}`,
+    ttl: TTL.QUOTE,
+    pollMs: 30000,
+  })
+
+  // The watchlist is already loaded once for the whole shell, so any holding
+  // the user also watches gets a real 30-day series in its expansion at no
+  // additional request. Anything else simply has none.
+  const { items: watchlistItems } = useWatchlist()
 
   const [modalOpen, setModalOpen] = useState(false)
+  const [prefill, setPrefill] = useState('')
   const [deleting, setDeleting] = useState(null)
   const [staleNotice, setStaleNotice] = useState(null)
   const [query, setQuery] = useState('')
   const [sector, setSector] = useState('')
   const [sort, setSort] = useState('value')
+  const [dir, setDir] = useState(-1)
   const toast = useToast()
 
   const deferredQuery = useDeferredValue(query)
+
+  // "Updated 1:41 PM" is a claim about when EVEREST last had these figures,
+  // which is exactly what this measures — it re-stamps on each new payload
+  // from the 30s poll. It is not a provider timestamp and does not pretend to
+  // be one.
+  const updatedAt = useMemo(() => (data ? new Date() : null), [data])
+
+  const positions = useMemo(() => data?.positions || [], [data])
+  const book = useMemo(() => buildBook(positions), [positions])
+
+  const sectors = useMemo(
+    () => [...book.sectors.keys()].sort((a, b) => a.localeCompare(b)),
+    [book],
+  )
+
+  const visible = useMemo(() => {
+    const narrowed = filterHoldings(book.rows, { query: deferredQuery, sector })
+    return sortHoldings(narrowed, sort, dir)
+  }, [book, deferredQuery, sector, sort, dir])
+
+  const handleSort = useCallback(
+    (key) => {
+      if (key === sort) setDir((current) => current * -1)
+      else {
+        setSort(key)
+        setDir(key === 'ticker' ? 1 : -1)
+      }
+    },
+    [sort],
+  )
+
+  const clearFilters = useCallback(() => {
+    setQuery('')
+    setSector('')
+  }, [])
+
+  const openAdd = useCallback((ticker = '') => {
+    setPrefill(ticker)
+    setModalOpen(true)
+  }, [])
 
   const handleAdded = (saved) => {
     // Stale saves keep the inline notice — it is contextual and persistent.
@@ -62,67 +127,12 @@ export default function Portfolio() {
       setStaleNotice(null)
       toast.success(`${saved?.ticker} added`, 'Your position is now being tracked.')
     }
-    // The book changed, so every derived view of it is now wrong. Clearing by
-    // prefix covers real/paper and any params variant without the call site
-    // needing to know the exact keys.
     invalidate('portfolio')
     invalidate('pnl')
+    invalidate('pfhist')
     invalidate('activity')
     refetch({ silent: true, force: true })
   }
-
-  const positions = useMemo(() => data?.positions || [], [data])
-
-  const totals = useMemo(
-    () =>
-      positions.reduce(
-        (acc, p) => ({
-          marketValue: acc.marketValue + (p.market_value || 0),
-          costBasis: acc.costBasis + (p.cost_basis || 0),
-          pnl: acc.pnl + (p.unrealized_pnl || 0),
-        }),
-        { marketValue: 0, costBasis: 0, pnl: 0 },
-      ),
-    [positions],
-  )
-
-  const sectors = useMemo(() => {
-    const found = new Set()
-    for (const position of positions) {
-      const reference = equityOrFallback(position.ticker)
-      const name =
-        position.sector && position.sector !== 'Unknown' ? position.sector : reference.sector
-      if (name) found.add(name)
-    }
-    return [...found].sort()
-  }, [positions])
-
-  const visible = useMemo(() => {
-    const needle = deferredQuery.trim().toLowerCase()
-
-    const filtered = positions.filter((position) => {
-      const reference = equityOrFallback(position.ticker)
-      const name = position.company || reference.name
-      const positionSector =
-        position.sector && position.sector !== 'Unknown' ? position.sector : reference.sector
-
-      if (sector && positionSector !== sector) return false
-      if (!needle) return true
-
-      return (
-        position.ticker.toLowerCase().includes(needle) ||
-        String(name).toLowerCase().includes(needle) ||
-        String(positionSector || '').toLowerCase().includes(needle)
-      )
-    })
-
-    // Copy before sorting — never mutate the fetched array.
-    return [...filtered].sort((a, b) => {
-      if (sort === 'pnl') return (b.unrealized_pnl ?? 0) - (a.unrealized_pnl ?? 0)
-      if (sort === 'ticker') return a.ticker.localeCompare(b.ticker)
-      return (b.market_value ?? 0) - (a.market_value ?? 0)
-    })
-  }, [positions, deferredQuery, sector, sort])
 
   const remove = async (id, ticker) => {
     setDeleting(id)
@@ -130,9 +140,10 @@ export default function Portfolio() {
       await api.deletePosition(id)
       invalidate('portfolio')
       invalidate('pnl')
+      invalidate('pfhist')
       invalidate('activity')
       await refetch({ silent: true, force: true })
-      toast.success(`${ticker} removed`)
+      toast.success(`${ticker} removed`, 'Everest has stopped tracking this holding.')
     } catch (err) {
       toast.error('Could not remove position', err.message)
     } finally {
@@ -142,45 +153,31 @@ export default function Portfolio() {
 
   const initialLoad = loading && !data
   const isEmpty = !initialLoad && positions.length === 0
+  const filtered = visible.length !== book.rows.length
+
+  if (error && !data) return <ErrorState error={error} onRetry={refetch} />
 
   return (
-    <div className="mx-auto max-w-[1440px]">
-      {/* Title and Real/Paper live in the topbar — not repeated here. */}
-      <PageHeader
-        subtitle="Every open position across your real and paper books."
-        actions={
-          <button
-            type="button"
-            onClick={() => setModalOpen(true)}
-            className="btn-primary cursor-pointer"
-          >
-            <Plus size={15} />
-            <span className="hidden sm:inline">Add position</span>
-          </button>
-        }
-      />
-
+    <StaggerGroup className="flex flex-col gap-3">
       {staleNotice ? (
-        <div className="mb-4">
+        <StaggerItem>
           <Notice tone="warn" onDismiss={() => setStaleNotice(null)}>
             Live prices temporarily unavailable. Your {staleNotice} position was saved
             successfully and is valued at your cost basis until quotes return.
           </Notice>
-        </div>
+        </StaggerItem>
       ) : null}
 
-      {error && !data ? (
-        <ErrorState error={error} onRetry={refetch} />
-      ) : isEmpty ? (
+      {isEmpty ? (
         <Surface>
           <EmptyState
             icon={Briefcase}
             title={`No ${mode} positions`}
-            description="Add your first holding and Everest will track live P&L, cost basis and allocation for you."
+            description="Add your first holding and Everest will track live P&L, cost basis, concentration and allocation for you."
             action={
               <button
                 type="button"
-                onClick={() => setModalOpen(true)}
+                onClick={() => openAdd()}
                 className="btn-primary cursor-pointer"
               >
                 <Plus size={15} />
@@ -191,67 +188,71 @@ export default function Portfolio() {
         </Surface>
       ) : (
         <>
-          <BookSummary
-            positions={positions}
-            totals={totals}
-            mode={mode}
-            loading={initialLoad}
-          />
-
-          {/* Only worth showing once there is enough to narrow. */}
-          {positions.length > 4 ? (
-            <Toolbar
-              query={query}
-              onQueryChange={setQuery}
-              placeholder="Search holdings"
-              sorts={SORTS}
-              sort={sort}
-              onSortChange={setSort}
-              filters={sectors}
-              filter={sector}
-              onFilterChange={setSector}
-              filterLabel="All sectors"
-              count={visible.length}
-              total={positions.length}
+          <StaggerItem>
+            <PortfolioValueBand
+              book={book}
+              mode={mode}
+              setMode={setMode}
+              realized={data?.realized_pnl || 0}
+              loading={initialLoad}
+              onAddPosition={() => openAdd()}
+              updatedAt={updatedAt}
             />
+          </StaggerItem>
+
+          {!initialLoad ? (
+            <StaggerItem>
+              <ConcentrationRibbon
+                book={book}
+                query={query}
+                sector={sector}
+                onSelectTicker={setQuery}
+                onSelectSector={setSector}
+                onClear={clearFilters}
+              />
+            </StaggerItem>
           ) : null}
 
-          {!initialLoad && visible.length === 0 ? (
-            <Surface>
-              <EmptyState
-                title="No holdings match those filters"
-                description="Try a different search term or clear the sector filter."
-                action={
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setQuery('')
-                      setSector('')
-                    }}
-                    className="btn-ghost cursor-pointer"
-                  >
-                    Clear filters
-                  </button>
-                }
-              />
-            </Surface>
-          ) : (
-            <HoldingsLedger
-              positions={visible}
-              totalValue={totals.marketValue}
+          <StaggerItem>
+            <LedgerControls
+              query={query}
+              onQueryChange={setQuery}
+              sector={sector}
+              onSectorChange={setSector}
+              sectors={sectors}
+              count={visible.length}
+              total={book.rows.length}
+            />
+          </StaggerItem>
+
+          <StaggerItem className="flex min-w-0 flex-col">
+            <PortfolioLedger
+              rows={visible}
+              book={book}
+              loading={initialLoad}
+              sort={sort}
+              dir={dir}
+              onSort={handleSort}
+              filtered={filtered}
+              onClearFilters={clearFilters}
+              seriesFor={(ticker) => seriesFor(ticker, watchlistItems)}
+              onOpenAdd={openAdd}
               onRemove={remove}
               removingId={deleting}
-              loading={initialLoad}
             />
-          )}
+          </StaggerItem>
         </>
       )}
 
       <AddPositionModal
+        // Remounted per prefill so a ticket opened from a row's "Add to
+        // position" starts on that ticker rather than on the previous one.
+        key={prefill || 'blank'}
         open={modalOpen}
+        defaultTicker={prefill}
         onClose={() => setModalOpen(false)}
         onAdded={handleAdded}
       />
-    </div>
+    </StaggerGroup>
   )
 }

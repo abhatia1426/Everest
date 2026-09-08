@@ -52,6 +52,12 @@ async def _enrich(positions: list[dict]) -> list[dict]:
                 "sector": quote.get("sector") or "Unknown",
                 "current_price": round(price, 4),
                 "price_stale": price_stale,
+                # Previous close is carried through UNROUNDED and UNSUBSTITUTED.
+                # Attribution (shares × (price − previous close)) is only honest
+                # when both legs are real provider reads, so a holding with no
+                # previous close must arrive as None rather than as the cost
+                # basis — the UI reports it as unmeasured instead of as $0.
+                "previous_close": quote.get("previous_close"),
                 "change_percent": quote.get("change_percent"),
                 "cost_basis": round(cost_basis, 2),
                 "market_value": round(market_value, 2),
@@ -220,7 +226,21 @@ async def portfolio_history(
             len(positions),
             ", ".join(missing),
         )
-        return {"mode": mode, "period": period, "series": [], "incomplete": True}
+        # Report WHICH holdings are missing, not just that something is.
+        #
+        # The client previously received a bare empty series, so the only
+        # honest thing it could say was "not enough history yet" — which reads
+        # as "your account is too new" when the real cause is that the provider
+        # has no candles for four specific symbols. Naming them turns a dead
+        # panel into an explanation the user can act on.
+        return {
+            "mode": mode,
+            "period": period,
+            "series": [],
+            "incomplete": True,
+            "missing": sorted(missing),
+            "holdings_count": len(positions),
+        }
 
     totals: dict[str, float] = defaultdict(float)
     for pos in positions:

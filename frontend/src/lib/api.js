@@ -128,6 +128,11 @@ export const api = {
   // market
   prices: (tickers) => request(`/prices?tickers=${encodeURIComponent(tickers.join(','))}`),
   history: (ticker, period) => request(`/prices/${ticker}/history?period=${period}`),
+  // Daily closes for MANY symbols in one call — the watchlist monitor's
+  // 30-session series. See the endpoint for why per-symbol history is not an
+  // option against the provider's per-minute call budget.
+  sessions: (tickers, days = 31) =>
+    request(`/prices/sessions?tickers=${encodeURIComponent(tickers.join(','))}&days=${days}`),
   profile: (ticker) => request(`/profile/${ticker}`),
 
   // portfolio
@@ -161,6 +166,9 @@ export const api = {
 
   // ai
   aiRuns: () => request('/ai/runs'),
+  // Provider identity for the "Everest AI" label's secondary detail. Read from
+  // the server so the tooltip can never name a model other than the pinned one.
+  aiProvider: () => request('/ai/provider'),
   aiAnalyst: (mode) => request('/ai/analyst', { method: 'POST', body: { mode } }),
   aiThesis: (payload) => request('/ai/thesis', { method: 'POST', body: payload }),
   aiScreener: (payload) => request('/ai/screener', { method: 'POST', body: payload }),

@@ -46,6 +46,18 @@ export const TTL = {
   ACTIVITY: { fresh: 30_000, stale: 5 * 60_000 },
 }
 
+/**
+ * How often a quote-bearing screen re-polls while its tab is visible.
+ *
+ * Stated here beside `TTL.QUOTE` because the two describe one policy: the
+ * poll decides how often we ASK, the TTL decides how long an answer counts.
+ * Settings reads both from this module rather than restating a number, so the
+ * page cannot end up describing a refresh cadence the app does not run.
+ *
+ * `useApi` skips a tick entirely while `document.hidden` is true.
+ */
+export const QUOTE_POLL_MS = 30_000
+
 /** Read an entry with its age, or undefined. */
 export function peek(key) {
   const entry = store.get(key)

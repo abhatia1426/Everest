@@ -1,35 +1,47 @@
 import { useCallback, useMemo, useState } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
-import {
-  Check,
-  Copy,
-  PanelRightClose,
-  PanelRightOpen,
-  RefreshCw,
-  Sparkles,
-  X,
-} from 'lucide-react'
 
+import { AnalysisStage } from '../../components/ai/AnalysisStage'
+import { AttributionBeam } from '../../components/ai/AttributionBeam'
+import { Investigate } from '../../components/ai/Investigate'
+import { RecentRuns } from '../../components/ai/RecentRuns'
+import { TodaysBrief } from '../../components/ai/TodaysBrief'
 import { Segmented } from '../../components/ui/Segmented'
-import { StaggerGroup, StaggerItem } from '../../components/Motion'
 import { TickerAutocomplete } from '../../components/search/TickerAutocomplete'
-import { EmptyState, ErrorState, InlineLoader, Notice } from '../../components/States'
-import { ToolReport } from '../../components/ai/Reports'
 import { CompanyLogo } from '../../components/ui/CompanyLogo'
-import { Panel, Surface } from '../../components/ui/Surface'
 import { useToast } from '../../components/ui/Toast'
 import { useApi } from '../../hooks/useApi'
-import { TTL } from '../../lib/cache'
 import { useMode } from '../../hooks/useMode'
+import { useSessionHistory } from '../../hooks/useSessionHistory'
 import { useWatchlist } from '../../hooks/useWatchlist'
-import { AI_TOOLS, getTool, initialValues, missingFields } from '../../lib/aiTools'
+import { TTL } from '../../lib/cache'
+import { INVESTIGATE_TOOLS, answerablePrompts, getTool, initialValues, missingFields } from '../../lib/aiTools'
 import { api } from '../../lib/api'
+import { buildBrief, groundingFor } from '../../lib/brief'
 import { equityOrFallback } from '../../lib/equitySource'
-import { deriveInsights } from '../../lib/insights'
-import { fmtMoney, fmtRelative } from '../../lib/format'
+import { fmtMoneyRounded } from '../../lib/format'
+import { X } from 'lucide-react'
 
+/**
+ * AI Insights — a measured intelligence brief with an investigation workspace
+ * attached, in that order of importance.
+ *
+ * THE PAGE IS TWO HALVES AND THEY ARE NOT PEERS.
+ *
+ * The attribution beam and Today's Brief are MEASURED: pure arithmetic over
+ * the user's own positions, quotes, closes, watchlist and contracts, computed
+ * in `lib/attribution.js` and `lib/brief.js`, which never touch the network or
+ * the model. Investigate and Analysis are GENERATED: one request to a provider
+ * that can be missing, throttled or broken.
+ *
+ * They are separate components over separate data on purpose. Every AI failure
+ * state on this page degrades the right-hand column ONLY — the brief renders
+ * identically whether a key is configured or not, because nothing in it was
+ * ever produced by a model. That is the promise the header makes, and the
+ * architecture is what keeps it true rather than a claim in a tooltip.
+ */
 const HISTORY_KEY = 'everest_ai_history'
 const MAX_HISTORY = 20
+const BENCHMARK = 'SPY'
 
 function readHistory() {
   try {
@@ -40,18 +52,10 @@ function readHistory() {
   }
 }
 
-/** Builds a history entry. Module scope so the impure clock call is never in
- *  a component body, where React's purity rule cannot tell render from handler. */
+/** Module scope so the impure clock call is never in a component body. */
 function makeHistoryEntry(tool, values, result) {
   const at = new Date().toISOString()
-  return {
-    key: `${tool.id}-${at}`,
-    toolId: tool.id,
-    toolName: tool.name,
-    at,
-    values,
-    result,
-  }
+  return { key: `${tool.id}-${at}`, toolId: tool.id, toolName: tool.name, at, values, result }
 }
 
 function persistHistory(next) {
@@ -63,132 +67,300 @@ function persistHistory(next) {
   return next
 }
 
-/* ------------------------------------------------------- context summary */
+export default function AIInsights() {
+  const { mode } = useMode()
+  const { items: watchlistItems } = useWatchlist()
+  const toast = useToast()
 
-/**
- * What the model is being given. Shown before any run so the user knows what
- * an answer is grounded in — and, just as importantly, what it is not.
- *
- * Reuses deriveInsights() rather than recomputing weights here, so the
- * dashboard and the workspace can never disagree about the same portfolio.
- */
-function ContextSummary({ pnl, watchlistItems, insights, mode }) {
-  const positions = pnl?.positions || []
-  const stale = positions.filter((p) => p.price_stale).length
+  /* ------------------------------------------------- measured inputs */
+
+  const pnlFetcher = useCallback(() => api.pnl(mode), [mode])
+  const { data: pnl, loading: pnlLoading } = useApi(pnlFetcher, [mode], {
+    key: `pnl:${mode}`,
+    ttl: TTL.QUOTE,
+  })
+
+  const optionsFetcher = useCallback(() => api.options({ mode }), [mode])
+  const { data: optionsData } = useApi(optionsFetcher, [mode], {
+    key: `options:${mode}`,
+    ttl: TTL.QUOTE,
+  })
+
+  const positions = useMemo(() => pnl?.positions || [], [pnl])
+  const options = useMemo(() => optionsData?.options || [], [optionsData])
+
+  // One batched history request covering the holdings, the watchlist AND the
+  // benchmark. The benchmark rides along rather than costing its own call —
+  // against an 8-calls-per-minute provider that difference is the difference
+  // between the comparison rendering and the whole board going empty.
+  const historySymbols = useMemo(
+    () => [
+      ...positions.map((p) => p.ticker),
+      ...watchlistItems.map((item) => item.ticker),
+      BENCHMARK,
+    ],
+    [positions, watchlistItems],
+  )
+  const { candlesFor } = useSessionHistory(historySymbols)
+
+  const brief = useMemo(
+    () =>
+      buildBrief({
+        pnl,
+        watchlist: watchlistItems,
+        options,
+        candlesFor,
+        benchmark: BENCHMARK,
+      }),
+    [pnl, watchlistItems, options, candlesFor],
+  )
+
+  const grounding = useMemo(
+    () => groundingFor({ pnl, watchlist: watchlistItems, options, brief }),
+    [pnl, watchlistItems, options, brief],
+  )
+
+  const { attribution } = brief
+
+  /* ------------------------------------------------ generated inputs */
+
+  const providerFetcher = useCallback(() => api.aiProvider(), [])
+  const { data: provider } = useApi(providerFetcher, [], {
+    key: 'ai:provider',
+    // The pinned model changes on a deploy, not on a clock.
+    ttl: TTL.HISTORY,
+  })
+
+  const [activeId, setActiveId] = useState(INVESTIGATE_TOOLS[0].id)
+  const [values, setValues] = useState(() => initialValues(INVESTIGATE_TOOLS[0]))
+  const [ask, setAsk] = useState(INVESTIGATE_TOOLS[0].prompts[0])
+  const [result, setResult] = useState(null)
+  const [error, setError] = useState(null)
+  const [running, setRunning] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [history, setHistory] = useState(readHistory)
+
+  const tool = getTool(activeId)
+
+  const disabledReasons = useMemo(() => {
+    const reasons = {}
+    for (const entry of INVESTIGATE_TOOLS) {
+      if (entry.needsPortfolio && positions.length === 0) reasons[entry.id] = 'Needs a holding'
+      if (entry.needsWatchlist && watchlistItems.length === 0) {
+        reasons[entry.id] = 'Needs a watchlist ticker'
+      }
+    }
+    return reasons
+  }, [positions.length, watchlistItems.length])
+
+  const prompts = useMemo(
+    () =>
+      answerablePrompts({
+        hasPortfolio: positions.length > 0,
+        hasWatchlist: watchlistItems.length > 0,
+      }),
+    [positions.length, watchlistItems.length],
+  )
+
+  const selectTool = (id) => {
+    const next = getTool(id)
+    setActiveId(id)
+    setValues(initialValues(next))
+    setResult(null)
+    setError(null)
+    if (next?.prompts?.length) setAsk(next.prompts[0])
+  }
+
+  const restoreEntry = (entry) => {
+    setActiveId(entry.toolId)
+    setValues(entry.values || {})
+    setResult(entry.result)
+    setError(null)
+  }
+
+  const missing = missingFields(tool, values)
+  const blocked = disabledReasons[tool.id]
+
+  const run = async () => {
+    if (blocked) {
+      toast.error(`${tool.name} is unavailable`, blocked)
+      return
+    }
+    if (missing.length > 0) {
+      toast.error(`${tool.name} needs more input`, `Add ${missing.join(' and ')}.`)
+      return
+    }
+
+    setError(null)
+    setRunning(true)
+    setResult(null)
+    try {
+      const data = await tool.run({
+        mode,
+        values,
+        watchlistTickers: watchlistItems.map((i) => i.ticker),
+      })
+      setResult(data)
+      setHistory((prev) =>
+        persistHistory([makeHistoryEntry(tool, values, data), ...prev].slice(0, MAX_HISTORY)),
+      )
+    } catch (err) {
+      setError(err)
+    } finally {
+      setRunning(false)
+    }
+  }
+
+  const copyReport = async () => {
+    if (!result) return
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(result, null, 2))
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+      toast.success('Analysis copied to clipboard')
+    } catch {
+      toast.error('Could not copy', 'Your browser blocked clipboard access.')
+    }
+  }
+
+  const clearHistory = () => {
+    setHistory([])
+    try {
+      localStorage.removeItem(HISTORY_KEY)
+    } catch {
+      /* ignore */
+    }
+  }
+
+  /*
+   * The stat strip above the generated prose is MEASURED, and is labelled as
+   * such by living in `AnalysisStage`'s measured region. It exists so a reader
+   * can check the model's opening sentence against the arithmetic without
+   * scrolling back to the brief.
+   */
+  const measured = useMemo(() => {
+    if (!attribution.hasData) return []
+    return [
+      {
+        label: 'Net today',
+        value: fmtMoneyRounded(attribution.net, { signed: true }),
+        tone: attribution.net >= 0 ? 'text-up' : 'text-down',
+      },
+      { label: 'Gained', value: fmtMoneyRounded(attribution.gainSum), tone: 'text-up' },
+      { label: 'Lost', value: fmtMoneyRounded(attribution.lossSum), tone: 'text-down' },
+      {
+        label: 'Up / down',
+        value: `${attribution.contributors.length} / ${attribution.detractors.length}`,
+      },
+    ]
+  }, [attribution])
+
+  const stage = running ? 'working' : error ? 'error' : result ? 'answer' : 'idle'
+
+  const staleCount = positions.filter((p) => p.price_stale).length
 
   return (
-    <Panel title="Context">
-      <dl className="grid grid-cols-2 gap-3 text-xs">
-        <div>
-          <dt className="text-text-secondary">Book</dt>
-          <dd className="mt-0.5 font-semibold capitalize text-text-primary">{mode}</dd>
-        </div>
-        <div>
-          <dt className="text-text-secondary">Holdings</dt>
-          <dd className="num mt-0.5 font-semibold text-text-primary">{positions.length}</dd>
-        </div>
-        <div>
-          <dt className="text-text-secondary">Cost basis</dt>
-          <dd className="num mt-0.5 font-semibold text-text-primary">{fmtMoney(pnl?.total_cost)}</dd>
-        </div>
-        <div>
-          <dt className="text-text-secondary">Watchlist</dt>
-          <dd className="num mt-0.5 font-semibold text-text-primary">{watchlistItems.length}</dd>
-        </div>
-      </dl>
-
-      {stale > 0 ? (
-        <div className="mt-3">
-          <Notice tone="warn">
-            {stale} of {positions.length} holdings lack live prices. Analysis uses cost basis and
-            will say so.
-          </Notice>
-        </div>
-      ) : null}
-
-      {insights.length > 0 ? (
-        <>
-          <p className="mb-2 mt-4 text-[11px] font-bold uppercase tracking-wider text-text-secondary">
-            Measured from your data
+    <div data-ai-route className="mx-auto max-w-[1600px] space-y-3">
+      {/* ------------------------------------------------------- header */}
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h1 className="font-display text-[27px] font-extrabold leading-none tracking-[-0.045em] text-text-primary">
+              AI Insights
+            </h1>
+            <span className="rounded-full bg-accent/[0.16] px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-[0.05em] text-accent">
+              Measured from your portfolio
+            </span>
+          </div>
+          <p className="mt-1.5 max-w-[820px] text-[12.5px] text-text-tertiary">
+            The brief below is calculated directly from your own positions, watchlist and options.
+            Written analysis is generated on request from those same figures.
           </p>
-          <ul className="space-y-1.5">
-            {insights.slice(0, 4).map((insight) => (
-              <li
-                key={insight.id}
-                className="flex gap-2 text-xs leading-relaxed text-text-secondary"
-              >
-                <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-accent" />
-                <span>{insight.text}</span>
-              </li>
-            ))}
-          </ul>
-        </>
-      ) : null}
+        </div>
 
-      <p className="mt-4 border-t pt-3 text-[11px] leading-relaxed text-text-secondary">
-        Everest sends only these figures. Anything a tool cannot measure is reported as unknown
-        rather than estimated.
-      </p>
-    </Panel>
-  )
-}
+        {/* Quote health — amber is TIME/attention, never direction. */}
+        <span
+          title={
+            staleCount
+              ? `${staleCount} holding${staleCount === 1 ? '' : 's'} have no live quote right now, so they are carried at cost basis and are excluded from today's attribution.`
+              : 'Every holding has a live quote, and the daily closes behind the session measures are current.'
+          }
+          className={`flex shrink-0 cursor-help items-center gap-2 rounded-full border px-3 py-2
+            text-[11.5px] font-bold ${
+              staleCount
+                ? 'border-warn/30 bg-warn/[0.14] text-warn'
+                : 'border-subtle text-up'
+            }`}
+        >
+          <span
+            className={`h-1.5 w-1.5 rounded-full ${
+              staleCount ? 'animate-pulse bg-warn' : 'bg-up'
+            }`}
+          />
+          {positions.length === 0
+            ? 'No holdings'
+            : staleCount
+              ? `${staleCount} at cost basis`
+              : 'All quotes live'}
+        </span>
+      </header>
 
-/* --------------------------------------------------------- tool selector */
+      {/* -------------------------------------------- attribution beam */}
+      {pnlLoading && positions.length === 0 ? null : (
+        <AttributionBeam attribution={attribution} />
+      )}
 
-function ToolSelector({ activeId, onSelect, disabledReasons }) {
-  return (
-    <Surface className="p-2">
-      <div className="flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">
-        {AI_TOOLS.map((tool) => {
-          const Icon = tool.icon
-          const active = tool.id === activeId
-          const reason = disabledReasons[tool.id]
+      {/* -------------------------------------------------- two columns */}
+      <div className="grid grid-cols-1 items-start gap-3 xl:grid-cols-[436px_minmax(0,1fr)]">
+        <TodaysBrief items={brief.items} />
 
-          return (
-            <button
-              key={tool.id}
-              type="button"
-              onClick={() => onSelect(tool.id)}
-              aria-pressed={active}
-              title={reason || tool.blurb}
-              // The blurb only shows on the active tool. Six tools each
-              // carrying two lines of description turned the rail into a wall
-              // of prose you had to read past to find the one you wanted.
-              className={`relative flex min-w-[172px] shrink-0 cursor-pointer items-start gap-2.5
-                rounded-control px-3 py-2.5 text-left transition-colors duration-150 lg:min-w-0 ${
-                  active
-                    ? 'bg-accent/[0.09] text-text-primary'
-                    : 'text-text-secondary hover:bg-tint/[0.04] hover:text-text-primary'
-                } ${reason ? 'opacity-55' : ''}`}
-            >
-              {active ? (
-                <span
-                  aria-hidden="true"
-                  className="absolute inset-y-2 left-0 w-[2px] rounded-full bg-accent"
-                />
-              ) : null}
-              <Icon size={15} className={`mt-0.5 shrink-0 ${active ? 'text-accent' : ''}`} />
-              <span className="min-w-0">
-                <span className="block text-[13px] font-semibold">{tool.name}</span>
-                {active || reason ? (
-                  <span className="mt-0.5 block text-[11px] leading-snug text-text-secondary">
-                    {reason || tool.blurb}
-                  </span>
-                ) : null}
-              </span>
-            </button>
-          )
-        })}
+        <div className="flex min-w-0 flex-col gap-3">
+          <Investigate
+            ask={ask}
+            onAskChange={setAsk}
+            prompts={prompts}
+            activeToolId={activeId}
+            onSelectTool={selectTool}
+            tools={INVESTIGATE_TOOLS}
+            disabledReasons={disabledReasons}
+            onRun={run}
+            running={running}
+            provider={provider}
+          >
+            {tool.fields.length ? (
+              <div className="mt-3.5 border-t border-subtle pt-3.5">
+                <ToolFields tool={tool} values={values} setValues={setValues} />
+              </div>
+            ) : null}
+          </Investigate>
+
+          <AnalysisStage
+            state={stage}
+            question={ask}
+            tool={tool}
+            result={result}
+            error={error}
+            measured={measured}
+            grounding={grounding}
+            limitations={brief.limitations}
+            provider={provider}
+            onRetry={run}
+            onCopy={copyReport}
+            copied={copied}
+          />
+
+          <RecentRuns history={history} onRestore={restoreEntry} onClear={clearHistory} />
+        </div>
       </div>
-    </Surface>
+    </div>
   )
 }
 
-/* ------------------------------------------------------------- controls */
+/* --------------------------------------------------------- tool inputs */
 
+/** Rendered from the registry's field spec, so a new tool needs no new UI. */
 function ToolFields({ tool, values, setValues }) {
   const set = (key, value) => setValues((prev) => ({ ...prev, [key]: value }))
-  if (!tool.fields.length) return null
 
   return (
     <div className="flex flex-wrap items-end gap-4">
@@ -235,12 +407,7 @@ function ToolFields({ tool, values, setValues }) {
                       <button
                         type="button"
                         aria-label={`Remove ${ticker}`}
-                        onClick={() =>
-                          set(
-                            field.key,
-                            list.filter((t) => t !== ticker),
-                          )
-                        }
+                        onClick={() => set(field.key, list.filter((t) => t !== ticker))}
                         className="grid h-5 w-5 cursor-pointer place-items-center rounded
                           text-text-secondary hover:text-down"
                       >
@@ -286,337 +453,6 @@ function ToolFields({ tool, values, setValues }) {
           </div>
         )
       })}
-    </div>
-  )
-}
-
-/** Recent runs, as a compact rail rather than a stacked card. */
-function HistoryRail({ history, onRestore, onClear }) {
-  return (
-    <Panel
-      title="Recent"
-      action={
-        history.length ? (
-          <button
-            type="button"
-            onClick={onClear}
-            className="cursor-pointer text-[11px] font-semibold text-text-tertiary
-              transition-colors duration-150 hover:text-down"
-          >
-            Clear
-          </button>
-        ) : null
-      }
-    >
-
-      {history.length === 0 ? (
-        <p className="py-3 text-[11px] leading-relaxed text-text-tertiary">
-          Runs appear here so you can revisit them.
-        </p>
-      ) : (
-        <ul className="space-y-1">
-          {history.slice(0, 8).map((entry) => (
-            <li key={entry.key}>
-              <button
-                type="button"
-                onClick={() => onRestore(entry)}
-                className="w-full rounded-control px-2.5 py-2 text-left transition-colors
-                  duration-200 hover:bg-tint/[0.05]"
-              >
-                <span className="block truncate text-xs font-semibold text-text-primary">
-                  {entry.toolName}
-                </span>
-                <span className="mt-0.5 flex items-center justify-between gap-2">
-                  <span className="truncate text-[10px] text-text-tertiary">
-                    {entry.values?.ticker ||
-                      (entry.values?.tickers || []).join(', ') ||
-                      entry.values?.style ||
-                      'Portfolio'}
-                  </span>
-                  <span className="shrink-0 text-[10px] text-text-tertiary">
-                    {fmtRelative(entry.at)}
-                  </span>
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </Panel>
-  )
-}
-
-/* ------------------------------------------------------------------ page */
-
-export default function AIInsights() {
-  const { mode } = useMode()
-  const { items: watchlistItems } = useWatchlist()
-  const toast = useToast()
-
-  const pnlFetcher = useCallback(() => api.pnl(mode), [mode])
-  const { data: pnl } = useApi(pnlFetcher, [mode], { key: `pnl:${mode}`, ttl: TTL.QUOTE })
-
-  const [activeId, setActiveId] = useState(AI_TOOLS[0].id)
-  const [values, setValues] = useState(() => initialValues(AI_TOOLS[0]))
-  const [result, setResult] = useState(null)
-  const [error, setError] = useState(null)
-  const [loading, setLoading] = useState(false)
-  const [copied, setCopied] = useState(false)
-  const [history, setHistory] = useState(readHistory)
-  const [contextOpen, setContextOpen] = useState(true)
-
-  const tool = getTool(activeId)
-  const positions = useMemo(() => pnl?.positions || [], [pnl])
-  const insights = useMemo(
-    () => deriveInsights({ pnl, watchlist: watchlistItems }),
-    [pnl, watchlistItems],
-  )
-
-  // Tool switching and history restore both set every piece of state together
-  // in the handler. Doing this in an effect would mean an extra render pass and
-  // a race between "reset the form" and "load the saved run".
-  const selectTool = (id) => {
-    setActiveId(id)
-    setValues(initialValues(getTool(id)))
-    setResult(null)
-    setError(null)
-  }
-
-  const restoreEntry = (entry) => {
-    setActiveId(entry.toolId)
-    setValues(entry.values || {})
-    setResult(entry.result)
-    setError(null)
-  }
-
-  const disabledReasons = useMemo(() => {
-    const reasons = {}
-    for (const entry of AI_TOOLS) {
-      if (entry.needsPortfolio && positions.length === 0) {
-        reasons[entry.id] = 'Needs a holding first'
-      }
-      if (entry.needsWatchlist && watchlistItems.length === 0) {
-        reasons[entry.id] = 'Needs a watchlist ticker'
-      }
-    }
-    return reasons
-  }, [positions.length, watchlistItems.length])
-
-  const missing = missingFields(tool, values)
-  const blocked = disabledReasons[tool.id]
-
-  const run = async () => {
-    setError(null)
-    setLoading(true)
-    setResult(null)
-    try {
-      const data = await tool.run({
-        mode,
-        values,
-        watchlistTickers: watchlistItems.map((i) => i.ticker),
-      })
-      setResult(data)
-
-      const entry = makeHistoryEntry(tool, values, data)
-      setHistory((prev) => persistHistory([entry, ...prev].slice(0, MAX_HISTORY)))
-    } catch (err) {
-      setError(err)
-      toast.error(`${tool.name} failed`, err.message)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const copyReport = async () => {
-    if (!result) return
-    try {
-      await navigator.clipboard.writeText(JSON.stringify(result, null, 2))
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-      toast.success('Report copied to clipboard')
-    } catch {
-      toast.error('Could not copy', 'Your browser blocked clipboard access.')
-    }
-  }
-
-  const clearHistory = () => {
-    setHistory([])
-    try {
-      localStorage.removeItem(HISTORY_KEY)
-    } catch {
-      /* ignore */
-    }
-  }
-
-  return (
-    /*
-     * Research workspace, not a chat page.
-     *
-     * Three columns: a tool rail (what can I ask), the report canvas (the
-     * answer), and a collapsible context rail (what the answer is grounded in).
-     * The canvas is the only thing that scrolls, so the rails stay put while
-     * you read — the Cursor/Claude-Desktop arrangement rather than a
-     * message feed.
-     */
-    <div className="mx-auto max-w-[1600px]">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
-        {/* The route name is already in the topbar; restating it at display
-            size with a gradient was decoration, not orientation. */}
-        <p className="text-[13px] text-text-secondary">
-          Six tools over your own book. Every answer states what it was grounded in.
-        </p>
-        <button
-          type="button"
-          onClick={() => setContextOpen((v) => !v)}
-          aria-pressed={contextOpen}
-          className="btn-ghost px-2.5 py-1.5 text-[12px]"
-        >
-          {contextOpen ? <PanelRightClose size={14} /> : <PanelRightOpen size={14} />}
-          {contextOpen ? 'Hide context' : 'Show context'}
-        </button>
-      </div>
-
-      <div
-        className="grid gap-5"
-        style={{
-          gridTemplateColumns: contextOpen
-            ? 'minmax(220px, 260px) minmax(0, 1fr) minmax(260px, 320px)'
-            : 'minmax(220px, 260px) minmax(0, 1fr)',
-        }}
-      >
-        {/* ---------------------------------------------------- tool rail */}
-        <aside className="space-y-4 max-lg:hidden">
-          <ToolSelector
-            activeId={activeId}
-            onSelect={selectTool}
-            disabledReasons={disabledReasons}
-          />
-          <HistoryRail history={history} onRestore={restoreEntry} onClear={clearHistory} />
-        </aside>
-
-        {/* ------------------------------------------------ report canvas */}
-        <section className="min-w-0 space-y-4">
-          {/* Mobile tool picker — the rail is desktop-only. */}
-          <div className="lg:hidden">
-            <ToolSelector
-              activeId={activeId}
-              onSelect={selectTool}
-              disabledReasons={disabledReasons}
-            />
-          </div>
-
-          {/* The run bar. Controls only — no gradient icon tile, which was
-              spending the accent on a decoration next to a button that needs
-              it. */}
-          <Surface className="p-5">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div className="min-w-0">
-                <h3 className="t-section">{tool.name}</h3>
-                <p className="t-body mt-1 max-w-xl text-[12.5px]">{tool.blurb}</p>
-                {/*
-                  Stated as prose, not chips. These were rendered as pill-shaped
-                  spans that looked pressable but had no handler — an affordance
-                  the interface could not honour.
-                */}
-                <p className="mt-2 text-[11px] leading-relaxed text-text-tertiary">
-                  Answers questions like {tool.prompts.slice(0, 2).map((p) => `“${p}”`).join(' or ')}.
-                </p>
-              </div>
-
-              {result ? (
-                <div className="flex shrink-0 items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={copyReport}
-                    className="btn-ghost px-2.5 py-1.5 text-[12px]"
-                  >
-                    {copied ? <Check size={13} /> : <Copy size={13} />}
-                    {copied ? 'Copied' : 'Copy'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={run}
-                    disabled={loading}
-                    className="btn-ghost px-2.5 py-1.5 text-[12px]"
-                  >
-                    <RefreshCw size={13} />
-                    Regenerate
-                  </button>
-                </div>
-              ) : null}
-            </div>
-
-            {tool.fields.length ? (
-              <div className="mt-5">
-                <ToolFields tool={tool} values={values} setValues={setValues} />
-              </div>
-            ) : null}
-
-            <button
-              type="button"
-              onClick={run}
-              disabled={loading || Boolean(blocked) || missing.length > 0}
-              className="btn-primary mt-5 w-full"
-            >
-              <Sparkles size={15} />
-              {loading
-                ? 'Climbing the data...'
-                : blocked
-                  ? blocked
-                  : missing.length
-                    ? `Add ${missing.join(' and ')}`
-                    : `Run ${tool.name}`}
-            </button>
-          </Surface>
-
-          {/* The report itself — a document surface, not a message bubble. */}
-          <Surface className="min-h-[420px] p-6 sm:p-8">
-            {loading ? (
-              <InlineLoader variant="ai" />
-            ) : error ? (
-              <ErrorState error={error} onRetry={run} />
-            ) : result ? (
-              <StaggerGroup className="space-y-4">
-                <StaggerItem>
-                  <ToolReport toolId={tool.id} result={result} />
-                </StaggerItem>
-              </StaggerGroup>
-            ) : (
-              <EmptyState
-                icon={Sparkles}
-                title={`No ${tool.name.toLowerCase()} yet`}
-                description={
-                  blocked ||
-                  'Run the tool to generate a written analysis grounded in the context rail.'
-                }
-              />
-            )}
-          </Surface>
-        </section>
-
-        {/* --------------------------------------------- context rail */}
-        <AnimatePresence initial={false}>
-          {contextOpen ? (
-            <motion.aside
-              key="context"
-              initial={{ opacity: 0, x: 12 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 12 }}
-              transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
-              className="max-xl:hidden"
-            >
-              <div className="sticky top-24">
-                <ContextSummary
-                  pnl={pnl}
-                  watchlistItems={watchlistItems}
-                  insights={insights}
-                  mode={mode}
-                />
-              </div>
-            </motion.aside>
-          ) : null}
-        </AnimatePresence>
-      </div>
     </div>
   )
 }

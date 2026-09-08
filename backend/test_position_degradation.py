@@ -108,3 +108,36 @@ def test_live_price_is_used_when_available(monkeypatch):
     assert row["current_price"] == 200.0
     assert row["market_value"] == 2000.00
     assert row["unrealized_pnl"] == 200.00
+
+
+# ------------------------------------------------- attribution's second leg
+
+def test_previous_close_is_carried_through_for_attribution(monkeypatch):
+    """AI Insights attributes the day as shares × (price − previous close)."""
+
+    async def fake_quotes(tickers):
+        return {t: {"ticker": t, "price": 200.0, "previous_close": 196.5} for t in tickers}
+
+    monkeypatch.setattr(market, "get_quotes", fake_quotes)
+
+    row = asyncio.run(_enrich([_doc()]))[0]
+
+    assert row["previous_close"] == 196.5
+
+
+def test_previous_close_is_none_rather_than_substituted(monkeypatch):
+    """A missing previous close must NOT fall back to cost basis.
+
+    Standing in the cost basis would make the attribution beam report a
+    fabricated dollar contribution for a holding it never measured.
+    """
+
+    async def fake_quotes(tickers):
+        return {t: {"ticker": t, "price": 200.0} for t in tickers}
+
+    monkeypatch.setattr(market, "get_quotes", fake_quotes)
+
+    row = asyncio.run(_enrich([_doc()]))[0]
+
+    assert row["previous_close"] is None
+    assert row["current_price"] == 200.0, "the price itself is still live"

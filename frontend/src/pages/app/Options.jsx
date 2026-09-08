@@ -1,14 +1,13 @@
 import { useCallback, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { AlertTriangle, Layers, Plus, Trash2 } from 'lucide-react'
+import { Layers, Plus, Trash2 } from 'lucide-react'
 
-import { PageHeader } from '../../components/AppLayout'
 import { AddOptionModal } from '../../components/AddOptionModal'
 import { StaggerGroup, StaggerItem } from '../../components/Motion'
-import { EmptyState, ErrorState, Skeleton } from '../../components/States'
-import { ContractCard } from '../../components/options/ContractCard'
-import { ExpirationTimeline } from '../../components/options/ExpirationTimeline'
-import { MetricGroup } from '../../components/ui/MetricGroup'
+import { EmptyState, ErrorState } from '../../components/States'
+import { ContractWorkspace } from '../../components/options/ContractWorkspace'
+import { OptionsBand } from '../../components/options/OptionsBand'
+import { SelectedContract } from '../../components/options/SelectedContract'
 import { Surface } from '../../components/ui/Surface'
 import { useApi } from '../../hooks/useApi'
 import { TTL, invalidate } from '../../lib/cache'
@@ -24,7 +23,7 @@ import {
   fmtSignedMoney,
   pnlColor,
 } from '../../lib/format'
-import { capitalAtRisk, expiryBuckets } from '../../lib/options'
+import { ESTIMATE_DISCLOSURE, bookTotals, contractView, workspaceCohorts } from '../../lib/options'
 
 /* --------------------------------------------------------------- table */
 
@@ -47,7 +46,8 @@ const COLUMNS = [
  * Retained — and still a table — because Stock Detail embeds it in a narrow
  * tab where three or four contracts on ONE underlying need to be compared
  * line by line. That is exactly the case where density beats composition.
- * The standalone Options page uses cards instead, for the reasons there.
+ * The standalone Options page is an expiry runway and contract workspace
+ * instead, for the reasons documented on the page below.
  */
 export function OptionsTable({ options, onDeleted, dense = false }) {
   const toast = useToast()
@@ -156,98 +156,156 @@ export function OptionsTable({ options, onDeleted, dense = false }) {
   )
 }
 
-/* ------------------------------------------------------------ risk band */
 
-function RiskSummary({ options, loading }) {
-  const stats = useMemo(() => {
-    const estValue = options.reduce((sum, o) => sum + (o.est_value || 0), 0)
-    const pnl = options.reduce((sum, o) => sum + (o.pnl || 0), 0)
-    const risk = capitalAtRisk(options)
-    return { estValue, pnl, risk, buckets: expiryBuckets(options) }
-  }, [options])
+/* --------------------------------------------------------------- page head */
 
-  if (loading) {
-    return (
-      <Surface className="mb-4 p-5 sm:p-6">
-        <Skeleton className="h-2.5 w-32" />
-        <Skeleton className="mt-3 h-10 w-56" />
-        <Skeleton className="mt-6 h-12 w-full" />
-      </Surface>
-    )
-  }
-
-  const urgent = stats.buckets.week + stats.buckets.expired
-
+/**
+ * The design's page head, minus the parts the app shell already draws.
+ *
+ * The shell's chrome carries the route title ("Options"), the nav, the account
+ * chip and the theme toggle — redrawing an <h1>Options</h1> here would put the
+ * same word on the screen twice. What IS page-level, and is therefore drawn:
+ * the status language, the count, the estimator disclosure and Add contract.
+ */
+function OptionsHead({ count, expiries, onAdd }) {
   return (
-    <Surface className="mb-4 p-5 sm:p-6">
-      <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
-        <div>
-          <p className="t-eyebrow">Estimated value</p>
-          <p className="num-hero mt-2 text-[clamp(1.75rem,3.4vw,2.5rem)] text-text-primary">
-            {fmtMoney(stats.estValue)}
-          </p>
+    <div className="flex flex-wrap items-end justify-between gap-4">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <span
+            className="rounded-full text-[10.5px] font-bold uppercase tracking-[0.05em] text-accent"
+            style={{ padding: '3px 9px', background: 'rgb(var(--accent-blue-rgb) / 0.14)' }}
+          >
+            Tracked positions
+          </span>
+          <span
+            className="num rounded-full text-[11px] font-semibold text-text-secondary"
+            style={{ padding: '3px 9px', background: 'var(--nested-bg)' }}
+          >
+            {count} open {count === 1 ? 'contract' : 'contracts'} ·{' '}
+            {expiries} {expiries === 1 ? 'expiry' : 'expiries'}
+          </span>
         </div>
 
-        <div className="min-w-[260px] flex-1">
-          <MetricGroup
-            items={[
-              {
-                label: 'Estimated P&L',
-                value: fmtSignedMoney(stats.pnl),
-                tone: pnlColor(stats.pnl),
-              },
-              // For long options the premium paid IS the maximum loss, which
-              // makes cost basis the honest headline risk figure.
-              { label: 'Capital at risk', value: fmtMoney(stats.risk), hint: 'max loss' },
-              { label: 'Open contracts', value: options.length },
-            ]}
-          />
-        </div>
+        {/*
+          THE DISCLOSURE IS NOT OPTIONAL AND NOT A TOOLTIP-ONLY. Every money
+          figure on this page is an estimate produced by a deliberately crude
+          formula; a page that shows contract values without saying so reads as
+          a broker's position screen.
+        */}
+        <p className="mt-1.5 flex max-w-[760px] items-center gap-[7px] text-[12.5px] text-text-tertiary">
+          Contracts you track yourself. Every value here is an estimate, not a live option quote.
+          <span
+            title={ESTIMATE_DISCLOSURE}
+            className="flex h-[15px] w-[15px] shrink-0 cursor-help items-center justify-center
+              rounded-full text-[9.5px] font-extrabold text-text-secondary"
+            style={{ border: '1px solid var(--border-strong)' }}
+          >
+            i
+          </span>
+        </p>
       </div>
 
-      {urgent > 0 ? (
-        <p className="mt-5 inline-flex items-center gap-2 rounded-control bg-warn/10 px-3 py-1.5
-          text-[11.5px] font-semibold text-warn">
-          <AlertTriangle size={13} />
-          {urgent} {urgent === 1 ? 'contract expires' : 'contracts expire'} within 7 days
-        </p>
-      ) : null}
-    </Surface>
+      <button
+        type="button"
+        onClick={onAdd}
+        className="flex shrink-0 cursor-pointer items-center gap-[7px] rounded-full text-[13px]
+          font-bold tracking-[-0.01em] transition-colors duration-150"
+        style={{
+          padding: '10px 18px',
+          background: 'var(--accent-blue)',
+          color: 'var(--brand-ink)',
+          boxShadow: '0 8px 20px -10px var(--accent-blue)',
+        }}
+      >
+        <Plus size={13} strokeWidth={2.4} />
+        <span className="max-[420px]:hidden">Add contract</span>
+      </button>
+    </div>
   )
 }
 
 /* -------------------------------------------------------------------- page */
 
 /**
- * Options — the trading and risk workspace.
+ * Options, composed to the approved `Everest Options.dc.html`.
  *
- * Primary task: understand exposure and time pressure. Two questions dominate,
- * and neither is answered by a grid of numbers: "how much can I lose" and
- * "when does this stop existing".
+ * THE PAGE IS AN EXPIRY RUNWAY AND A TRACKED-CONTRACT WORKSPACE. It is not an
+ * options chain, not a trading terminal, not a strategy builder and not a
+ * Greeks dashboard. Everest stores long-only contracts the user typed in and
+ * prices them with a crude estimator; the page is built to be exactly that,
+ * truthfully, rather than to resemble a brokerage screen it cannot back.
  *
- * So the page leads with a risk band (value, P&L, capital at risk, expiry
- * warning), then an expiration timeline, then contract cards whose central
- * element is a strike meter — spot, strike and breakeven on one axis.
+ * THREE BANDS, in the design's order:
  *
- * NOTE ON GREEKS: the API returns no delta/gamma/theta/vega and no implied
- * volatility to derive them from, so none are shown. See lib/options.js.
+ *   1. book totals beside the expiry runway — value, estimated P/L, capital at
+ *      risk, calls/puts, nearest expiry, and every contract on one time axis
+ *   2. the contract workspace — filters, sorts, and rows grouped into expiry
+ *      cohorts, each row centred on a strike/breakeven meter
+ *   3. the selected-contract stage
+ *
+ * WHAT THE DESIGN DRAWS THAT THIS DOES NOT, and why:
+ *
+ * · The mockup's estimator tooltip claims the time premium "fades as the
+ *   underlying moves away from the strike". The real estimator
+ *   (`services/market.estimate_option_value`) is intrinsic value plus a flat
+ *   12%-a-year charge on the underlying prorated by days left, with NO
+ *   dependence on distance from the strike. The copy was corrected to describe
+ *   the code; the code was not changed to flatter the copy. See
+ *   `ESTIMATE_DISCLOSURE`.
+ * · The mockup's nav, account chip, theme toggle and page title belong to the
+ *   app shell, which already draws them.
+ * · No Greeks, no implied volatility, no bid/ask, no open interest, no chain,
+ *   no probability of profit, no assignment probability. The API returns none
+ *   of them and rendering zeros would look like measurement.
+ *
+ * A CONTRACT WITH NO UNDERLYING QUOTE is not valued at zero. `est_value` comes
+ * back null, the row and the stage say so, and it is excluded from the book's
+ * estimated total rather than dragging it down by its own absence.
  */
 export default function Options() {
   const { mode } = useMode()
   const toast = useToast()
-  const [deleting, setDeleting] = useState(null)
   const fetcher = useCallback(() => api.options({ mode }), [mode])
-  const { data, loading, error, refetch } = useApi(fetcher, [mode], { key: `options:${mode}`, ttl: TTL.PORTFOLIO, pollMs: 60000 })
+  const { data, loading, error, refetch } = useApi(fetcher, [mode], {
+    key: `options:${mode}`,
+    ttl: TTL.PORTFOLIO,
+    pollMs: 60000,
+  })
+
   const [modalOpen, setModalOpen] = useState(false)
+  const [deleting, setDeleting] = useState(null)
+  const [filter, setFilter] = useState('All')
+  const [sort, setSort] = useState('Soonest')
+  const [chosen, setChosen] = useState(null)
 
   const options = useMemo(() => data?.options || [], [data])
 
-  // Soonest expiry first: urgency is the natural reading order for a book of
-  // decaying instruments.
-  const sorted = useMemo(
-    () => [...options].sort((a, b) => (a.dte ?? 0) - (b.dte ?? 0)),
-    [options],
+  /** One derived view per contract, shared by all three bands. */
+  const views = useMemo(() => options.map(contractView), [options])
+  const totals = useMemo(() => bookTotals(views), [views])
+
+  const { cohorts, count: shown } = useMemo(
+    () => workspaceCohorts(views, { filter, sort }),
+    [views, filter, sort],
   )
+
+  const horizon = useMemo(
+    () => (views.length ? Math.max(...views.map((view) => Math.max(view.dte, 0))) : 0),
+    [views],
+  )
+
+  /**
+   * The selected contract. `chosen` is only a preference: if the contract is
+   * removed, or filtered out, the stage falls back to the first visible row
+   * rather than emptying — the stage is never blank while the book has rows.
+   */
+  const selected = useMemo(() => {
+    const visible = cohorts.flatMap((cohort) => cohort.rows)
+    const preferred = views.find((view) => view.id === chosen)
+    if (preferred && visible.some((view) => view.id === chosen)) return preferred
+    return visible[0] || views[0] || null
+  }, [cohorts, views, chosen])
 
   const remove = async (id, ticker) => {
     setDeleting(id)
@@ -255,7 +313,8 @@ export default function Options() {
       await api.deleteOption(id)
       invalidate('options')
       await refetch({ silent: true, force: true })
-      toast.success(`${ticker} contract removed`)
+      if (chosen === id) setChosen(null)
+      toast.success(`${ticker} contract removed`, 'Everest has stopped tracking it.')
     } catch (err) {
       toast.error('Could not remove contract', err.message)
     } finally {
@@ -265,30 +324,16 @@ export default function Options() {
 
   const initialLoad = loading && !data
 
-  return (
-    <div className="mx-auto max-w-[1440px]">
-      <PageHeader
-        subtitle="Estimated values use intrinsic value plus a simple time premium — not an options pricing model."
-        actions={
-          <button
-            type="button"
-            onClick={() => setModalOpen(true)}
-            className="btn-primary cursor-pointer"
-          >
-            <Plus size={15} />
-            <span className="hidden sm:inline">Add contract</span>
-          </button>
-        }
-      />
+  if (error && !data) return <ErrorState error={error} onRetry={refetch} />
 
-      {error && !data ? (
-        <ErrorState error={error} onRetry={refetch} />
-      ) : !initialLoad && options.length === 0 ? (
+  if (!initialLoad && options.length === 0) {
+    return (
+      <>
         <Surface>
           <EmptyState
             icon={Layers}
             title={`No ${mode} contracts`}
-            description="Track calls and puts with breakeven, moneyness and days-to-expiry warnings."
+            description="Track calls and puts you already hold. Everest shows each one's expiry runway, strike and breakeven distance, and an estimated value — it does not place trades or quote options."
             action={
               <button
                 type="button"
@@ -301,48 +346,74 @@ export default function Options() {
             }
           />
         </Surface>
-      ) : (
-        <>
-          <RiskSummary options={options} loading={initialLoad} />
+        <AddOptionModal
+          open={modalOpen}
+          onClose={() => setModalOpen(false)}
+          onAdded={() => refetch({ silent: true, force: true })}
+        />
+      </>
+    )
+  }
 
-          {initialLoad ? (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <Skeleton key={i} className="h-[290px] w-full rounded-card" />
-              ))}
-            </div>
-          ) : (
-            <>
-              {options.length > 1 ? (
-                <div className="mb-4">
-                  <ExpirationTimeline options={options} />
-                </div>
-              ) : null}
+  return (
+    <StaggerGroup className="flex flex-col gap-3">
+      <StaggerItem>
+        <OptionsHead
+          count={options.length}
+          expiries={totals.expiries}
+          onAdd={() => setModalOpen(true)}
+        />
+      </StaggerItem>
 
-              <StaggerGroup
-                className="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
-                stagger={0.04}
-              >
-                {sorted.map((option) => (
-                  <StaggerItem key={option.id}>
-                    <ContractCard
-                      option={option}
-                      onRemove={remove}
-                      removing={deleting === option.id}
-                    />
-                  </StaggerItem>
-                ))}
-              </StaggerGroup>
-            </>
-          )}
-        </>
-      )}
+      <StaggerItem>
+        <OptionsBand
+          views={views}
+          totals={totals}
+          selectedId={selected?.id}
+          onSelect={setChosen}
+          loading={initialLoad}
+        />
+      </StaggerItem>
+
+      {/*
+        The approved lower grid: workspace beside a 356px stage, single column
+        at 1320px where the stage also stops being sticky. `min-w-0` on the
+        workspace keeps a wide row from widening the page instead of scrolling
+        inside its own panel.
+      */}
+      <StaggerItem
+        className="grid items-start gap-3
+          [grid-template-columns:minmax(0,1fr)_356px]
+          max-[1320px]:[grid-template-columns:minmax(0,1fr)]"
+      >
+        <ContractWorkspace
+          cohorts={cohorts}
+          shown={shown}
+          total={views.length}
+          filter={filter}
+          onFilter={setFilter}
+          sort={sort}
+          onSort={setSort}
+          selectedId={selected?.id}
+          onSelect={setChosen}
+          loading={initialLoad}
+        />
+
+        {selected ? (
+          <SelectedContract
+            view={selected}
+            horizon={horizon}
+            onRemove={remove}
+            removing={deleting === selected.id}
+          />
+        ) : null}
+      </StaggerItem>
 
       <AddOptionModal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        onAdded={() => refetch({ silent: true })}
+        onAdded={() => refetch({ silent: true, force: true })}
       />
-    </div>
+    </StaggerGroup>
   )
 }

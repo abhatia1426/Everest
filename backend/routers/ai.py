@@ -6,7 +6,7 @@ from typing import Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from config import db, iso_utc
+from config import GEMINI_API_KEY, db, iso_utc
 from routers.auth import get_current_user
 from routers.portfolio import _enrich, _fetch_positions
 from services import gemini, market
@@ -42,6 +42,24 @@ async def _record_run(user_id, tool: str, result: dict) -> dict:
         upsert=True,
     )
     return {**result, "ran_at": ran_at.isoformat()}
+
+
+@router.get("/provider")
+async def provider(user: dict = Depends(get_current_user)):
+    """What is actually behind the written analysis.
+
+    The UI leads with "Everest AI" and keeps the exact provider and model in a
+    secondary tooltip, but it must not HARDCODE either — a pinned model that
+    changes in `services/gemini.py` would otherwise leave the tooltip asserting
+    something untrue. `configured` lets the workspace show the missing-key state
+    before a run is attempted rather than after a 503.
+    """
+    return {
+        "label": "Everest AI",
+        "provider": "Google Gemini",
+        "model": gemini.MODEL_NAME,
+        "configured": bool(GEMINI_API_KEY),
+    }
 
 
 @router.get("/runs")

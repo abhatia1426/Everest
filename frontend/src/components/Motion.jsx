@@ -113,12 +113,13 @@ export function StaggerGroup({ children, className = '', stagger = 0.02 }) {
   )
 }
 
-export function StaggerItem({ children, className = '' }) {
+export function StaggerItem({ children, className = '', style }) {
   return (
     <motion.div
       // h-full: as a grid item this div stretches to the row height, and its
       // child panel needs that height available to fill it.
       className={`h-full ${className}`}
+      style={style}
       // 0.02s stagger over nine dashboard panels totals ~180ms, against ~720ms
       // before. A stagger long enough to notice is a stagger long enough to
       // make the page feel slow.

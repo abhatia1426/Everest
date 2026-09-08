@@ -1,3 +1,4 @@
+import { Segmented } from './ui/Segmented'
 import { useMode } from '../hooks/useMode'
 
 export const TIME_RANGES = ['1H', '1D', '1W', '1M', '3M', '6M', '1Y', 'ALL']
@@ -6,47 +7,26 @@ export function apiPeriod(label) {
   return label.toLowerCase()
 }
 
-/** Segmented pill group. Used for time ranges, chart type and any 2-8 option switch. */
+/**
+ * Segmented pill group. Used for time ranges, chart type and any 2-8 option
+ * switch across the product.
+ *
+ * Now a thin alias over `ui/Segmented` rather than its own implementation.
+ * It previously painted the selected segment with a blue→violet gradient,
+ * which was both the loudest object on several screens and the single largest
+ * source of the purple cast the product is moving away from. Delegating means
+ * every segmented control in Everest is literally the same control.
+ */
 export function PillGroup({ options, value, onChange, label, size = 'sm' }) {
-  const pad = size === 'xs' ? 'px-2.5 py-1 text-[11px]' : 'px-3 py-1.5 text-xs'
-
   return (
-    <div
-      role="radiogroup"
-      aria-label={label}
-      className="surface-1 inline-flex items-center gap-0.5 !rounded-full p-1"
-    >
-      {options.map((option) => {
-        const optValue = typeof option === 'string' ? option : option.value
-        const optLabel = typeof option === 'string' ? option : option.label
-        const active = optValue === value
-
-        return (
-          <button
-            key={optValue}
-            type="button"
-            role="radio"
-            aria-checked={active}
-            onClick={() => onChange(optValue)}
-            style={
-              active
-                ? {
-                    background:
-                      'linear-gradient(135deg, var(--accent-blue), var(--accent-violet))',
-                  }
-                : undefined
-            }
-            className={`cursor-pointer select-none rounded-full font-semibold transition-all duration-200 ${pad} ${
-              active
-                ? 'text-white shadow-[0_2px_10px_-2px_rgb(var(--accent-blue-rgb)/0.7)]'
-                : 'text-text-secondary hover:bg-tint/[0.06] hover:text-text-primary'
-            }`}
-          >
-            {optLabel}
-          </button>
-        )
-      })}
-    </div>
+    <Segmented
+      options={options}
+      value={value}
+      onChange={onChange}
+      label={label}
+      size={size === 'xs' ? 'sm' : 'md'}
+      tone="accent"
+    />
   )
 }
 

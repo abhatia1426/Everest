@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 
 import { CompanyLogo } from './CompanyLogo'
-import { QuoteBadge } from './QuoteBadge'
+import { QuoteDot } from './QuoteBadge'
 import { normalizeQuote } from '../../lib/quotes'
 import { equityOrFallback } from '../../lib/equitySource'
 import { fmtMoney, fmtPercent, pnlColor } from '../../lib/format'
@@ -71,11 +71,18 @@ export function DataRow({
       {trailing ? <span className="hidden shrink-0 sm:block">{trailing}</span> : null}
 
       <span className="shrink-0 text-right">
-        <span className="num block text-[13px] font-semibold text-text-primary">
+        <span className="num flex items-center justify-end gap-1.5 text-[13px] font-semibold text-text-primary">
+          {/*
+            Provenance rides beside the price as a dot rather than a line of
+            text beneath it. In a list the label form repeated once per row and
+            dominated the column it was annotating; the dot keeps the sentence
+            in its tooltip and accessible name, and renders nothing at all when
+            the quote is live.
+          */}
+          <QuoteDot quote={view} />
           {primaryValue}
         </span>
         <span className="num block text-[11px] font-semibold">{secondaryValue}</span>
-        <QuoteBadge quote={view} showIcon={false} className="justify-end" />
       </span>
     </>
   )

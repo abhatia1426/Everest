@@ -26,9 +26,18 @@ export default {
       },
       borderRadius: {
         // Semantic radius scale. card > panel > control > pill.
+        //
+        // These resolve their variable AT THE USE SITE, which is what lets the
+        // authenticated app re-pitch the whole scale to the approved design
+        // (20 / 14 / 10) from inside `.app-theme` without the frozen landing —
+        // which reads the same class names — moving at all.
         card: 'var(--radius-card)',
         panel: 'var(--radius-panel)',
         control: 'var(--radius-control)',
+        // Explicit aliases for the approved two-tier surface language, for new
+        // product work that wants to name the tier rather than infer it.
+        surface: 'var(--radius-surface, var(--radius-card))',
+        nested: 'var(--radius-nested, var(--radius-panel))',
       },
       borderColor: {
         subtle: 'var(--border)',
@@ -50,8 +59,16 @@ export default {
         'body-lg': ['1.125rem', { lineHeight: '1.65' }],
       },
       fontFamily: {
+        // `sans` is the DOCUMENT default and the frozen landing's typeface.
+        // Do not repoint it — `.num-hero` resolves it via theme(), and the
+        // landing's entire type scale is composed against Inter's metrics.
         sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
         mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+        // Approved authenticated-app faces. Bound only under `.app-theme`.
+        // Archivo carries headings and every financial figure; Instrument Sans
+        // carries UI text.
+        display: ['Archivo', 'Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        ui: ['"Instrument Sans"', 'Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
       },
       transitionDuration: {
         DEFAULT: '150ms',
@@ -77,6 +94,13 @@ export default {
           '0%': { backgroundPosition: '-500px 0' },
           '100%': { backgroundPosition: '500px 0' },
         },
+        // Bars and beam segments grow from their own anchor edge — the caller
+        // sets `transform-origin`, so a detractor grows leftward from the
+        // previous-close rule and a contributor grows rightward from it.
+        'grow-x': {
+          '0%': { transform: 'scaleX(0)' },
+          '100%': { transform: 'scaleX(1)' },
+        },
       },
       animation: {
         'fade-up': 'fade-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) both',
@@ -84,6 +108,7 @@ export default {
         'scale-in': 'scale-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) both',
         'pulse-soft': 'pulse-soft 2.4s ease-in-out infinite',
         shimmer: 'shimmer 1.6s linear infinite',
+        'grow-x': 'grow-x 0.55s cubic-bezier(0.2, 0.7, 0.2, 1) both',
       },
     },
   },
